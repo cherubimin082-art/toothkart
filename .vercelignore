@@ -1,0 +1,10 @@
+# Vercel only serves the website (frontend/) and forwards data requests to the backend host.
+# Nothing from the backend (code, .env, database, uploads) is ever uploaded to Vercel.
+backend
+.git
+.vscode
+.env*
+*.db
+*.log
+render.yaml
+README.md
