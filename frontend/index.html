@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>toothkart – Dental Supplies Store</title>
+  <script>document.documentElement.classList.add('js')</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="topbar" aria-label="Offers">
+    <div class="ticker">
+      <div class="tk">
+        <span>Free delivery on orders above ₹999</span><span>100% original products</span><span>Up to 30% off on top brands</span>
+        <span>Cash on delivery available</span><span>Trusted by clinics since 2016</span><span>Free delivery on orders above ₹999</span>
+        <span>100% original products</span><span>Up to 30% off on top brands</span>
+      </div>
+      <div class="tk" aria-hidden="true">
+        <span>Free delivery on orders above ₹999</span><span>100% original products</span><span>Up to 30% off on top brands</span>
+        <span>Cash on delivery available</span><span>Trusted by clinics since 2016</span><span>Free delivery on orders above ₹999</span>
+        <span>100% original products</span><span>Up to 30% off on top brands</span>
+      </div>
+    </div>
+  </div>
+
+  <header class="header" id="header">
+    <div class="container header-row">
+      <a class="logo" href="#"><b>Tooth<span>Kart</span></b><small>Trusted by clinics since 2016</small></a>
+      <button class="pincode" id="pincodeBtn">📍 <span id="pincodeText">Enter pincode</span></button>
+      <form class="search" id="searchForm">
+        <input type="search" id="searchInput" placeholder="Search dental products" aria-label="Search">
+        <button type="submit">Search</button>
+      </form>
+      <div class="actions">
+        <button class="hbtn" id="accountBtn">👤 Sign in</button>
+        <button class="hbtn" id="cartBtn">🛒 Cart <b id="cartCount">0</b></button>
+      </div>
+    </div>
+    <nav class="nav">
+      <div class="container nav-row">
+        <a href="#" data-nav="categories">Categories</a><a href="#" data-nav="brands">Brands</a><a href="#" data-nav="soon">Freebies</a>
+        <a href="#" data-nav="products">Best Sellers</a><a href="#" data-nav="offers">Offers</a><a href="#" data-nav="products">New Arrivals</a>
+        <a href="#" data-nav="soon">Membership</a><a href="#" data-nav="soon">Events</a><a href="#" data-nav="soon">Clinic Setup</a>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="container hero" aria-label="Featured">
+      <button class="arrow prev" aria-label="Previous">‹</button>
+      <div class="slides" id="slides"></div>
+      <button class="arrow next" aria-label="Next">›</button>
+      <div class="dots" id="dots"></div>
+    </section>
+
+    <section class="container trust">
+      <div class="reveal left"><i>⭐</i><p><b>4.5★</b><span>Average rating</span></p></div>
+      <div class="reveal" style="--d:80ms"><i>✅</i><p><b>100%</b><span>Original products</span></p></div>
+      <div class="reveal" style="--d:160ms"><i>💰</i><p><b>Best</b><span>Assured prices</span></p></div>
+      <div class="reveal right" style="--d:240ms"><i>😁</i><p><b>500K+</b><span>Happy users</span></p></div>
+    </section>
+
+    <section class="container block reveal" id="brandsSection">
+      <h2>Top Brands</h2>
+      <div class="marquee"><div class="track" id="brands"></div></div>
+    </section>
+
+    <section class="container block reveal" id="categoriesSection">
+      <h2>Top Categories</h2>
+      <div class="grid" id="categories"></div>
+    </section>
+
+    <section class="container block reveal" id="productsSection">
+      <div class="block-head">
+        <h2 id="productsTitle">Products</h2>
+        <button class="link" id="clearFilter" hidden>Clear filter ✕</button>
+      </div>
+      <div class="products" id="products"></div>
+      <p class="empty" id="productsEmpty" hidden></p>
+    </section>
+
+    <section class="container suggest reveal">
+      <div>
+        <h3>Can't find a product?</h3>
+        <p>Tell us what you need and we'll source it for you.</p>
+      </div>
+      <button class="btn" id="suggestBtn">Suggest a Product</button>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-grid">
+      <div><h4>Tooth<span>Kart</span></h4><p>Your one-stop shop for dental clinics and students.</p></div>
+      <div><h4>Help</h4><a href="#">Contact us</a><a href="#">Shipping policy</a><a href="#">Returns</a></div>
+      <div><h4>Company</h4><a href="#">About us</a><a href="#">Careers</a><a href="#">Events</a></div>
+      <div><h4>Payments</h4><p>UPI · Cards · Net banking · COD</p></div>
+    </div>
+    <div class="legal">© 2026 ToothKart. Demo project.</div>
+  </footer>
+
+  <button class="totop" id="toTop" aria-label="Back to top">↑</button>
+
+  <!-- Sign in / register -->
+  <dialog id="authDlg">
+    <div class="auth-tabs" role="tablist">
+      <button type="button" class="on" data-pane="email" role="tab">Email</button>
+      <button type="button" data-pane="otp" role="tab">Mobile OTP</button>
+    </div>
+    <form id="authForm">
+      <h3 id="authTitle">Sign in</h3>
+      <label id="nameRow" hidden>Name<input name="name" autocomplete="name"></label>
+      <label>Email<input name="email" type="email" required autocomplete="email"></label>
+      <label>Password<input name="password" type="password" required minlength="8" autocomplete="current-password"></label>
+      <p class="form-error" id="authError" role="alert"></p>
+      <button class="btn wide" type="submit" id="authSubmit">Sign in</button>
+      <p class="switch"><span id="authSwitchText">New to ToothKart?</span> <button type="button" class="link" id="authSwitch">Create an account</button></p>
+      <button type="button" class="link close" id="authClose">Cancel</button>
+    </form>
+
+    <form id="otpForm" hidden>
+      <h3>Sign in with your mobile</h3>
+      <div id="otpStep1">
+        <label><span>Mobile number</span>
+          <div class="phone"><b>+91</b><input name="phone" type="tel" inputmode="numeric" maxlength="16" autocomplete="tel-national" placeholder="10-digit mobile number" required></div>
+        </label>
+        <p class="sg-text">We'll text you a 6-digit code. New here? Your account is created automatically.</p>
+      </div>
+      <div id="otpStep2" hidden>
+        <p class="sg-text" id="otpSentTo"></p>
+        <label><span>Enter the 6-digit OTP</span><input name="code" class="otp-input" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••"></label>
+        <label><span>Your name <span class="opt-tag">(for new accounts)</span></span><input name="name" autocomplete="name" maxlength="80"></label>
+      </div>
+      <p class="form-error" id="otpError" role="alert"></p>
+      <button class="btn wide" type="submit" id="otpSubmit">Send OTP</button>
+      <p class="switch" id="otpLinks" hidden><button type="button" class="link" id="otpResend">Resend OTP</button> · <button type="button" class="link" id="otpChange">Change number</button></p>
+      <button type="button" class="link close" id="otpClose">Cancel</button>
+    </form>
+  </dialog>
+
+  <!-- Suggest a product -->
+  <dialog id="suggestDlg">
+    <form id="suggestForm">
+      <div class="sg-head"><h3>Suggest a product</h3><button type="button" class="link" id="suggestClose" aria-label="Close">✕</button></div>
+      <p class="sg-text"><b>Didn't find what you are looking for?</b><br>Tell us what you need and we'll try to source it.</p>
+      <label><span>Product name <em class="req">*</em></span><input name="product_name" required maxlength="150" placeholder="e.g. Apex locator"></label>
+      <label><span>Brand name <span class="opt-tag">(optional)</span></span><input name="brand" maxlength="100" placeholder="e.g. Dentsply"></label>
+      <label><span>Link <span class="opt-tag">(optional)</span></span><input name="url" type="url" maxlength="500" placeholder="https://"></label>
+      <label><span>Your email <span class="opt-tag">(optional, so we can reply)</span></span><input name="email" type="email" maxlength="150" autocomplete="email" placeholder="you@example.com"></label>
+      <label><span>Comment <span class="opt-tag">(optional)</span></span><textarea name="comment" rows="3" maxlength="1000" placeholder="Model, size, quantity or anything else that helps"></textarea></label>
+      <p class="form-error" id="suggestError" role="alert"></p>
+      <button class="btn wide" type="submit" id="suggestSubmit">Submit</button>
+    </form>
+  </dialog>
+
+  <!-- Checkout -->
+  <dialog id="checkoutDlg">
+    <form id="checkoutForm">
+      <h3>Delivery details</h3>
+      <label>Full name<input name="name" required autocomplete="name"></label>
+      <label>Phone (10 digits)<input name="phone" required pattern="\d{10}" inputmode="numeric" autocomplete="tel"></label>
+      <label>Address<input name="address" required autocomplete="street-address"></label>
+      <label>Pincode<input name="pincode" required pattern="\d{6}" inputmode="numeric" autocomplete="postal-code"></label>
+      <fieldset class="pay">
+        <legend>Payment mode</legend>
+        <label class="opt"><input type="radio" name="payment_method" value="COD" checked><span><b>Cash on delivery</b><small>Pay when your order arrives</small></span></label>
+        <label class="opt"><input type="radio" name="payment_method" value="PREPAID"><span><b>Prepaid</b><small>UPI / bank transfer. Our team confirms your payment after accepting the order.</small></span></label>
+      </fieldset>
+      <p class="form-error" id="checkoutError" role="alert"></p>
+      <button class="btn wide" type="submit" id="placeBtn">Place order</button>
+      <button type="button" class="link close" id="checkoutClose">Cancel</button>
+    </form>
+  </dialog>
+
+  <!-- Cart drawer -->
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-head"><h3>Your cart</h3><button class="link" id="drawerClose" aria-label="Close cart">✕</button></div>
+    <div class="drawer-body" id="cartItems"></div>
+    <div class="drawer-foot" id="cartFoot"></div>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>

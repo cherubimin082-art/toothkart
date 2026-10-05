@@ -1,0 +1,20 @@
+# Secrets and customer data: never commit these
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+*.sqlite*
+
+# Uploaded product images (keep the folder, not the files)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Dependencies, logs, editor and OS files
+node_modules/
+*.log
+*.err
+.vscode/
+.DS_Store
+Thumbs.db

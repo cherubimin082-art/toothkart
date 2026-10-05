@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Account – ToothKart</title>
+  <script>document.documentElement.classList.add('js')</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="header scrolled">
+    <div class="container header-row">
+      <a class="logo" href="index.html"><b>Tooth<span>Kart</span></b><small>My account</small></a>
+      <div class="grow"></div>
+      <div class="actions">
+        <a class="hbtn" href="index.html">← Continue shopping</a>
+        <button class="hbtn" id="signOut" hidden>Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container acct">
+    <section id="gate" class="gate" hidden>
+      <h2 id="gateTitle">Please sign in</h2>
+      <p id="gateText">Sign in to see your orders, download invoices and manage your account.</p>
+      <a class="btn" href="index.html#signin" id="gateBtn">Sign in</a>
+    </section>
+
+    <div id="dash" hidden>
+      <div class="hello">
+        <h1 id="hello"></h1>
+        <p id="sub"></p>
+      </div>
+      <div class="stats-grid" id="stats"></div>
+
+      <div class="tabs">
+        <button class="tabbtn on" data-tab="orders">My orders</button>
+        <button class="tabbtn" data-tab="profile">Profile &amp; password</button>
+      </div>
+
+      <section id="tab-orders">
+        <div id="orders"></div>
+        <div class="gate" id="noOrders" hidden>
+          <h2>No orders yet</h2>
+          <p>When you place an order it will show up here.</p>
+          <a class="btn" href="index.html">Start shopping</a>
+        </div>
+      </section>
+
+      <section id="tab-profile" hidden>
+        <div class="panel">
+          <h3>Your details</h3>
+          <dl class="kv">
+            <dt>Name</dt><dd id="pName"></dd>
+            <dt>Email</dt><dd id="pEmail"></dd>
+            <dt>Mobile</dt><dd id="pPhone"></dd>
+            <dt>Member since</dt><dd id="pSince"></dd>
+          </dl>
+        </div>
+        <form class="panel" id="pwForm">
+          <h3>Change password</h3>
+          <label>Current password<input type="password" name="current" required autocomplete="current-password"></label>
+          <label>New password (at least 8 characters)<input type="password" name="next" required minlength="8" autocomplete="new-password"></label>
+          <label>Confirm new password<input type="password" name="confirm" required minlength="8" autocomplete="new-password"></label>
+          <p class="form-error" id="pwError" role="alert"></p>
+          <button class="btn" type="submit">Update password</button>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script src="account.js"></script>
+</body>
+</html>
