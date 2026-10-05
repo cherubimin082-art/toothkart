@@ -1,8 +1,8 @@
 const { DatabaseSync } = require('node:sqlite');
 const bcrypt = require('bcryptjs');
-const path = require('path');
+const { dbFile } = require('./config');
 
-const db = new DatabaseSync(process.env.DB_FILE || path.join(__dirname, 'toothkart.db'));
+const db = new DatabaseSync(dbFile);
 db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
 // Orders keep a copy of the customer's name and email, and user_id becomes NULL if the account is removed,

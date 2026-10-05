@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const db = require('../database');
 const { requireAdmin } = require('../middleware/auth');
 
-const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+const { uploadDir: UPLOAD_DIR } = require('../config');
 const TYPES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
 
 const upload = multer({

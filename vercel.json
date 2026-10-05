@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "",
+  "buildCommand": "",
+  "outputDirectory": "frontend",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://toothkart-api.onrender.com/api/:path*" },
+    { "source": "/uploads/:path*", "destination": "https://toothkart-api.onrender.com/uploads/:path*" },
+    { "source": "/admin", "destination": "https://toothkart-api.onrender.com/admin/" },
+    { "source": "/admin/:path*", "destination": "https://toothkart-api.onrender.com/admin/:path*" }
+  ]
+}
