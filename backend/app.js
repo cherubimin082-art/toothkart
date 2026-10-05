@@ -3,9 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const config = require('./config');
-const db = require('./database');
 
+// Check the settings first: loading the database module below opens the database straight away
 config.checkProduction();
+const db = require('./database');
 const app = express();
 
 // Behind Vercel (or any proxy) the real visitor address arrives in X-Forwarded-For. Without this every visitor
