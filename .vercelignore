@@ -1,10 +1,12 @@
-# Vercel only serves the website (frontend/) and forwards data requests to the backend host.
-# Nothing from the backend (code, .env, database, uploads) is ever uploaded to Vercel.
-backend
+# What is NOT uploaded to Vercel. The backend code goes up (it runs as a function), but never secrets or data.
+backend/node_modules
+backend/.env*
+backend/*.db
+backend/*.db-*
+backend/uploads
+backend/*.log
+backend/*.err
 .git
 .vscode
 .env*
 *.db
-*.log
-render.yaml
-README.md

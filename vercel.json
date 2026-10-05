@@ -1,13 +1,19 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "installCommand": "",
+  "installCommand": "npm install",
   "buildCommand": "",
   "outputDirectory": "frontend",
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 30,
+      "includeFiles": "node_modules/pdfkit/js/data/**"
+    }
+  },
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://toothkart-cherubimin-api.onrender.com/api/:path*" },
-    { "source": "/uploads/:path*", "destination": "https://toothkart-cherubimin-api.onrender.com/uploads/:path*" },
-    { "source": "/admin", "destination": "https://toothkart-cherubimin-api.onrender.com/admin/" },
-    { "source": "/admin/:path*", "destination": "https://toothkart-cherubimin-api.onrender.com/admin/:path*" }
+    {
+      "source": "/api/:path*",
+      "destination": "/api"
+    }
   ]
 }

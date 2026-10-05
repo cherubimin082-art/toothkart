@@ -43,7 +43,8 @@ function ask(question, { hidden = false } = {}) {
 }
 
 (async () => {
-  const admins = db.prepare("SELECT id, name, email FROM users WHERE role = 'admin' ORDER BY id").all();
+  await db.ready();
+  const admins = await db.prepare("SELECT id, name, email FROM users WHERE role = 'admin' ORDER BY id").all();
   if (!admins.length) { console.error('There is no admin account yet. Start the server once to create it.'); process.exit(1); }
 
   let admin = admins[0];
@@ -61,7 +62,7 @@ function ask(question, { hidden = false } = {}) {
   const again = await ask('Type it again to confirm: ', { hidden: true });
   if (again !== pw) { console.error('The two passwords do not match. Nothing was changed.'); process.exit(1); }
 
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(pw, 10), admin.id);
+  await db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(pw, 10), admin.id);
   console.log('\nDone. The new password works the next time you sign in. Anyone already signed in stays signed in until they sign out.');
   process.exit(0);
 })();

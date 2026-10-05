@@ -55,6 +55,21 @@ $('#loginForm').addEventListener('submit', async e => {
 });
 $('#logout').onclick = signOut;
 
+// ---------- Change my own password ----------
+$('#pwBtn').onclick = () => { $('#pwForm').reset(); $('#pwError').textContent = ''; $('#pwDlg').showModal(); };
+$('#pwCancel').onclick = () => $('#pwDlg').close();
+$('#pwForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target;
+  $('#pwError').textContent = '';
+  if (f.next.value !== f.confirm.value) return ($('#pwError').textContent = 'The two new passwords do not match');
+  try {
+    await api('/auth/password', { method: 'POST', json: { current: f.current.value, next: f.next.value } });
+    $('#pwDlg').close();
+    alert('Password updated. Use the new one the next time you sign in.');
+  } catch (err) { $('#pwError').textContent = err.message; }
+});
+
 async function start(user) {
   $('#login').hidden = true;
   $('#app').hidden = false;

@@ -1,31 +1,22 @@
 const router = require('express').Router();
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
 const db = require('../database');
 const { requireAdmin } = require('../middleware/auth');
+const { saveImage, removeImage, imageUrl, EXT } = require('../storage');
 
-const { uploadDir: UPLOAD_DIR } = require('../config');
-const TYPES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
-
+// The image is held in memory first (3 MB at most), checked, then handed to storage (disk or Vercel Blob)
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: UPLOAD_DIR,
-    filename: (req, file, cb) => cb(null, crypto.randomUUID() + TYPES[file.mimetype]),
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 3 * 1024 * 1024 },
   fileFilter: (req, file, cb) =>
-    TYPES[file.mimetype] ? cb(null, true) : cb(new Error('Only JPG, PNG or WebP images allowed')),
+    EXT[file.mimetype] ? cb(null, true) : cb(new Error('Only JPG, PNG or WebP images allowed')),
 });
 
 const withPrice = p => ({
   ...p,
-  image_url: p.image ? `/uploads/${p.image}` : null,
+  image_url: imageUrl(p.image),
   final_price: Math.round(p.price * (1 - p.discount_percent / 100) * 100) / 100,
 });
-
-const removeImage = name => name && fs.rm(path.join(UPLOAD_DIR, name), { force: true }, () => {});
 
 function parseBody(body) {
   const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
@@ -49,8 +40,12 @@ const INVALID_BRAND = 'Choose a brand from the list (add it under Brands first i
 const INVALID_CATEGORY = 'Choose a category from the list (add it under Categories first if it is new)';
 const INVALID = 'name, price (>=0), discount_percent (0-100) and stock (whole number >=0) are required';
 
+// Return the name exactly as listed, or undefined if it is not in the list (capitals are forgiven)
+const listedBrand = async name => (await db.prepare('SELECT name FROM brands WHERE name = ?').get(name))?.name;
+const listedCategory = async name => (await db.prepare('SELECT name FROM categories WHERE name = ?').get(name))?.name;
+
 // Public: list with search / filters / pagination
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const { q, category, brand } = req.query;
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
@@ -61,67 +56,79 @@ router.get('/', (req, res) => {
   if (req.query.onOffer === 'true') where.push('discount_percent > 0');
   const clause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
-  const total = db.prepare(`SELECT COUNT(*) AS n FROM products ${clause}`).get(...args).n;
-  const rows = db.prepare(`SELECT * FROM products ${clause} ORDER BY id DESC LIMIT ? OFFSET ?`)
-    .all(...args, limit, (page - 1) * limit);
+  const [{ n: total }, rows] = await Promise.all([
+    db.prepare(`SELECT COUNT(*) AS n FROM products ${clause}`).get(...args),
+    db.prepare(`SELECT * FROM products ${clause} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...args, limit, (page - 1) * limit),
+  ]);
   res.json({ total, page, limit, products: rows.map(withPrice) });
 });
 
-router.get('/:id', (req, res) => {
-  const p = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+router.get('/:id', async (req, res) => {
+  const p = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!p) return res.status(404).json({ error: 'Product not found' });
   res.json(withPrice(p));
 });
 
-// Admin: create (multipart/form-data, optional "image" file)
-// Returns the category exactly as listed, or undefined if it is not in the list
-const listedBrand = name => db.prepare('SELECT name FROM brands WHERE name = ?').get(name)?.name;
-const listedCategory = name => db.prepare('SELECT name FROM categories WHERE name = ?').get(name)?.name;
-
-router.post('/', requireAdmin, upload.single('image'), (req, res) => {
+// Admin: create (multipart/form-data, optional "image" file). Everything is checked before the image is stored.
+router.post('/', requireAdmin, upload.single('image'), async (req, res) => {
   const d = parseBody(req.body);
-  if (!d) { removeImage(req.file?.filename); return res.status(400).json({ error: INVALID }); }
-  d.category = d.category && listedCategory(d.category);
-  if (!d.category) { removeImage(req.file?.filename); return res.status(400).json({ error: INVALID_CATEGORY }); }
+  if (!d) return res.status(400).json({ error: INVALID });
+  d.category = d.category && await listedCategory(d.category);
+  if (!d.category) return res.status(400).json({ error: INVALID_CATEGORY });
   if (d.brand) {
-    d.brand = listedBrand(d.brand);
-    if (!d.brand) { removeImage(req.file?.filename); return res.status(400).json({ error: INVALID_BRAND }); }
+    d.brand = await listedBrand(d.brand);
+    if (!d.brand) return res.status(400).json({ error: INVALID_BRAND });
   }
-  const info = db.prepare(
-    `INSERT INTO products (name, brand, category, description, price, discount_percent, stock, image)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(d.name, d.brand, d.category, d.description, d.price, d.discount_percent, d.stock, req.file?.filename ?? null);
-  const p = db.prepare('SELECT * FROM products WHERE id = ?').get(info.lastInsertRowid);
-  res.status(201).json(withPrice(p));
+  const image = req.file ? await saveImage(req.file) : null;
+  let info;
+  try {
+    info = await db.prepare(
+      `INSERT INTO products (name, brand, category, description, price, discount_percent, stock, image)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(d.name, d.brand, d.category, d.description, d.price, d.discount_percent, d.stock, image);
+  } catch (err) {
+    await removeImage(image); // do not leave an orphan image behind
+    throw err;
+  }
+  res.status(201).json(withPrice(await db.prepare('SELECT * FROM products WHERE id = ?').get(info.lastInsertRowid)));
 });
 
 // Admin: update. Missing fields keep their current value; a new image replaces the old one.
-router.put('/:id', requireAdmin, upload.single('image'), (req, res) => {
-  const cur = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
-  if (!cur) { removeImage(req.file?.filename); return res.status(404).json({ error: 'Product not found' }); }
+router.put('/:id', requireAdmin, upload.single('image'), async (req, res) => {
+  const cur = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+  if (!cur) return res.status(404).json({ error: 'Product not found' });
   const d = parseBody({ ...cur, ...req.body });
-  if (!d) { removeImage(req.file?.filename); return res.status(400).json({ error: INVALID }); }
+  if (!d) return res.status(400).json({ error: INVALID });
   if (d.category) {
-    d.category = listedCategory(d.category);
-    if (!d.category) { removeImage(req.file?.filename); return res.status(400).json({ error: INVALID_CATEGORY }); }
+    d.category = await listedCategory(d.category);
+    if (!d.category) return res.status(400).json({ error: INVALID_CATEGORY });
   }
   if (d.brand) {
-    d.brand = listedBrand(d.brand);
-    if (!d.brand) { removeImage(req.file?.filename); return res.status(400).json({ error: INVALID_BRAND }); }
+    d.brand = await listedBrand(d.brand);
+    if (!d.brand) return res.status(400).json({ error: INVALID_BRAND });
   }
-  const image = req.file ? req.file.filename : cur.image;
-  db.prepare(
-    `UPDATE products SET name=?, brand=?, category=?, description=?, price=?, discount_percent=?, stock=?, image=? WHERE id=?`
-  ).run(d.name, d.brand, d.category, d.description, d.price, d.discount_percent, d.stock, image, cur.id);
-  if (req.file) removeImage(cur.image);
-  res.json(withPrice(db.prepare('SELECT * FROM products WHERE id = ?').get(cur.id)));
+  const image = req.file ? await saveImage(req.file) : cur.image;
+  try {
+    await db.prepare(
+      `UPDATE products SET name=?, brand=?, category=?, description=?, price=?, discount_percent=?, stock=?, image=? WHERE id=?`
+    ).run(d.name, d.brand, d.category, d.description, d.price, d.discount_percent, d.stock, image, cur.id);
+  } catch (err) {
+    if (req.file) await removeImage(image);
+    throw err;
+  }
+  if (req.file) await removeImage(cur.image);
+  res.json(withPrice(await db.prepare('SELECT * FROM products WHERE id = ?').get(cur.id)));
 });
 
-router.delete('/:id', requireAdmin, (req, res) => {
-  const cur = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+router.delete('/:id', requireAdmin, async (req, res) => {
+  const cur = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!cur) return res.status(404).json({ error: 'Product not found' });
-  db.prepare('DELETE FROM products WHERE id = ?').run(cur.id);
-  removeImage(cur.image);
+  await db.transaction(async tx => {
+    await tx.prepare('DELETE FROM cart_items WHERE product_id = ?').run(cur.id);
+    await tx.prepare('UPDATE order_items SET product_id = NULL WHERE product_id = ?').run(cur.id); // past orders keep the name and price
+    await tx.prepare('DELETE FROM products WHERE id = ?').run(cur.id);
+  });
+  await removeImage(cur.image);
   res.status(204).end();
 });
 

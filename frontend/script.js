@@ -10,6 +10,8 @@ const slidesData = [
 ];
 
 const $ = id => document.getElementById(id);
+// Product images are either a full web address (Vercel Blob) or a path on this server (local uploads)
+const imgSrc = u => (/^https?:\/\//.test(u) ? u : API + u);
 const inr = n => '₹' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: Number.isInteger(+n) ? 0 : 2, maximumFractionDigits: 2 });
 
 // Build elements with textContent only, so product data can never inject HTML
@@ -171,7 +173,7 @@ async function loadProducts() {
 
 function card(p, i) {
   const img = p.image_url
-    ? (img => { img.onerror = () => img.replaceWith(el('span', { textContent: '🦷' })); return img; })(el('img', { src: API + p.image_url, alt: p.name, loading: 'lazy' }))
+    ? (img => { img.onerror = () => img.replaceWith(el('span', { textContent: '🦷' })); return img; })(el('img', { src: imgSrc(p.image_url), alt: p.name, loading: 'lazy' }))
     : el('span', { textContent: '🦷' });
   const price = el('div', { className: 'price' }, el('b', { textContent: inr(p.final_price) }));
   if (p.discount_percent > 0) price.append(el('s', { textContent: inr(p.price) }), el('em', { textContent: 'Save ' + inr(p.price - p.final_price) }));
@@ -323,7 +325,7 @@ function renderCart(cart) {
     return;
   }
   body.replaceChildren(...cart.items.map(({ product: p, quantity, line_total }) => {
-    const thumb = p.image_url ? (img => { img.onerror = () => img.replaceWith(el('span', { textContent: '🦷' })); return img; })(el('img', { src: API + p.image_url, alt: '' })) : el('span', { textContent: '🦷' });
+    const thumb = p.image_url ? (img => { img.onerror = () => img.replaceWith(el('span', { textContent: '🦷' })); return img; })(el('img', { src: imgSrc(p.image_url), alt: '' })) : el('span', { textContent: '🦷' });
     const qty = el('div', { className: 'qty' },
       el('button', { textContent: '−', onclick: () => setQty(p.id, quantity - 1), 'aria-label': 'Decrease' }),
       el('span', { textContent: quantity }),
@@ -447,6 +449,8 @@ window.addEventListener('scroll', () => {
 }, { passive: true });
 
 // ---------- Start ----------
+// Offer the mobile-OTP tab only when a code can really reach the customer
+api('/auth/options').then(o => { if (!o.otp) document.querySelector('.auth-tabs').hidden = true; }).catch(() => {});
 observeReveals();
 loadBrands();
 loadCategories();
