@@ -86,3 +86,10 @@ td.wide{min-width:200px}
 .act:disabled{opacity:.5;cursor:wait}
 td a{color:#2563eb;word-break:break-all}
 td a:hover{text-decoration:underline}
+
+.cat-icon{font-size:24px;width:60px}
+.hint{margin:-4px 0 12px}
+select[name=category]{width:100%;padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;font:inherit}
+select[name=category]:focus{outline:2px solid var(--orange);border-color:var(--orange)}
+select[name=brand]{width:100%;padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;font:inherit}
+select[name=brand]:focus{outline:2px solid var(--orange);border-color:var(--orange)}

@@ -59,18 +59,22 @@ async function start(user) {
   $('#login').hidden = true;
   $('#app').hidden = false;
   $('#who').textContent = user.email;
-  await Promise.all([loadStats(), loadProducts()]);
+  await Promise.all([loadStats(), loadCategories(), loadBrands(), loadProducts()]);
 }
 
 // ---------- Tabs ----------
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t === b));
   $('#tab-products').hidden = b.dataset.tab !== 'products';
+  $('#tab-categories').hidden = b.dataset.tab !== 'categories';
+  $('#tab-brands').hidden = b.dataset.tab !== 'brands';
   $('#tab-orders').hidden = b.dataset.tab !== 'orders';
   $('#tab-suggestions').hidden = b.dataset.tab !== 'suggestions';
   $('#tab-users').hidden = b.dataset.tab !== 'users';
   if (b.dataset.tab === 'suggestions') loadSuggestions();
   if (b.dataset.tab === 'users') loadUsers();
+  if (b.dataset.tab === 'categories') loadCategories();
+  if (b.dataset.tab === 'brands') loadBrands();
   if (b.dataset.tab === 'orders') loadOrders();
 });
 
@@ -142,7 +146,9 @@ function openForm(p) {
   form.reset();
   $('#formError').textContent = '';
   $('#dlgTitle').textContent = p ? 'Edit product' : 'Add product';
-  if (p) for (const k of ['name', 'brand', 'category', 'description', 'price', 'discount_percent', 'stock']) form[k].value = p[k] ?? '';
+  fillCategorySelect(p ? p.category : '');
+  fillBrandSelect(p ? p.brand : '');
+  if (p) for (const k of ['name', 'description', 'price', 'discount_percent', 'stock']) form[k].value = p[k] ?? '';
   $('#preview').hidden = !(p && p.image_url);
   if (p && p.image_url) $('#preview').src = p.image_url;
   updateFinal();
@@ -162,6 +168,161 @@ form.addEventListener('submit', async e => {
     await Promise.all([loadProducts(), loadStats()]);
   } catch (err) { $('#formError').textContent = err.message; }
 });
+
+// ---------- Categories ----------
+let categories = [];
+const NEW_CAT = '__new__';
+let catEditing = null;       // the category being edited, or null when adding
+let afterCatSaved = null;    // what to do with the saved category (used by the product form)
+
+async function loadCategories() {
+  try {
+    categories = await api('/categories');
+    renderCategories();
+  } catch (err) { alert(err.message); }
+}
+
+function renderCategories() {
+  $('#noCats').hidden = categories.length > 0;
+  $('#catRows').replaceChildren(...categories.map(c => {
+    const act = (label, cls, fn) => el('button', { className: 'act ' + cls, textContent: label, onclick: fn });
+    return el('tr', {},
+      el('td', { className: 'cat-icon', textContent: c.icon }),
+      el('td', {}, el('b', { textContent: c.name })),
+      el('td', {}, el('span', { className: 'badge ' + (c.products ? 'ok' : 'warn'), textContent: c.products ? `${c.products} product${c.products === 1 ? '' : 's'}` : 'Empty' })),
+      el('td', {}, el('div', { className: 'order-actions' }, act('Edit', 'alt', () => openCatForm(c)), act('Delete', 'no', () => deleteCategory(c)))));
+  }));
+}
+
+// The product form's dropdown: every category, plus a shortcut to add a new one
+function fillCategorySelect(selected) {
+  const sel = $('#catSelect');
+  const names = categories.map(c => c.name);
+  const opts = [el('option', { value: '', textContent: 'Choose a category…', disabled: true })];
+  if (selected && !names.includes(selected)) opts.push(el('option', { value: selected, textContent: selected + ' (not in list)' }));
+  opts.push(...categories.map(c => el('option', { value: c.name, textContent: `${c.icon} ${c.name}` })));
+  opts.push(el('option', { value: NEW_CAT, textContent: '+ Add new category…' }));
+  sel.replaceChildren(...opts);
+  sel.value = selected || '';
+  sel.dataset.last = sel.value;
+}
+
+$('#catSelect').addEventListener('change', e => {
+  const sel = e.target;
+  if (sel.value !== NEW_CAT) { sel.dataset.last = sel.value; return; }
+  sel.value = sel.dataset.last || '';              // go back to the previous choice until the new one is saved
+  afterCatSaved = c => fillCategorySelect(c.name);
+  openCatForm(null);
+});
+
+function openCatForm(c) {
+  catEditing = c;
+  $('#catForm').reset();
+  $('#catError').textContent = '';
+  $('#catDlgTitle').textContent = c ? 'Edit category' : 'Add category';
+  if (c) { $('#catForm').name.value = c.name; $('#catForm').icon.value = c.icon; }
+  $('#catDlg').showModal();
+}
+$('#newCatBtn').onclick = () => { afterCatSaved = null; openCatForm(null); };
+$('#catCancel').onclick = () => { afterCatSaved = null; $('#catDlg').close(); };
+
+$('#catForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('#catError').textContent = '';
+  const f = e.target;
+  try {
+    const saved = await api(catEditing ? '/categories/' + catEditing.id : '/categories', { method: catEditing ? 'PATCH' : 'POST', json: { name: f.name.value, icon: f.icon.value } });
+    $('#catDlg').close();
+    await Promise.all([loadCategories(), loadProducts()]);
+    if (afterCatSaved) afterCatSaved(saved);
+    afterCatSaved = null;
+  } catch (err) { $('#catError').textContent = err.message; }
+});
+
+async function deleteCategory(c) {
+  const note = c.products ? `\n\nIts ${c.products} product${c.products === 1 ? '' : 's'} will be kept but left without a category.` : '';
+  if (!confirm(`Delete the category "${c.name}"?${note}`)) return;
+  try {
+    await api('/categories/' + c.id, { method: 'DELETE' });
+    await Promise.all([loadCategories(), loadProducts()]);
+  } catch (err) { alert(err.message); }
+}
+
+// ---------- Brands ----------
+let brands = [];
+const NEW_BRAND = '__newbrand__';
+let brandEditing = null;     // the brand being renamed, or null when adding
+let afterBrandSaved = null;  // what to do with the saved brand (used by the product form)
+
+async function loadBrands() {
+  try {
+    brands = await api('/brands');
+    renderBrands();
+  } catch (err) { alert(err.message); }
+}
+
+function renderBrands() {
+  $('#noBrands').hidden = brands.length > 0;
+  $('#brandRows').replaceChildren(...brands.map(b => {
+    const act = (label, cls, fn) => el('button', { className: 'act ' + cls, textContent: label, onclick: fn });
+    return el('tr', {},
+      el('td', {}, el('b', { textContent: b.name })),
+      el('td', {}, el('span', { className: 'badge ' + (b.products ? 'ok' : 'warn'), textContent: b.products ? `${b.products} product${b.products === 1 ? '' : 's'}` : 'Empty' })),
+      el('td', {}, el('div', { className: 'order-actions' }, act('Edit', 'alt', () => openBrandForm(b)), act('Delete', 'no', () => deleteBrand(b)))));
+  }));
+}
+
+// The product form's brand dropdown: optional, with a shortcut to add a new brand
+function fillBrandSelect(selected) {
+  const sel = $('#brandSelect');
+  const opts = [el('option', { value: '', textContent: 'No brand' })];
+  if (selected && !brands.some(b => b.name === selected)) opts.push(el('option', { value: selected, textContent: selected + ' (not in list)' }));
+  opts.push(...brands.map(b => el('option', { value: b.name, textContent: b.name })));
+  opts.push(el('option', { value: NEW_BRAND, textContent: '+ Add new brand…' }));
+  sel.replaceChildren(...opts);
+  sel.value = selected || '';
+  sel.dataset.last = sel.value;
+}
+
+$('#brandSelect').addEventListener('change', e => {
+  const sel = e.target;
+  if (sel.value !== NEW_BRAND) { sel.dataset.last = sel.value; return; }
+  sel.value = sel.dataset.last || '';              // go back to the previous choice until the new one is saved
+  afterBrandSaved = b => fillBrandSelect(b.name);
+  openBrandForm(null);
+});
+
+function openBrandForm(b) {
+  brandEditing = b;
+  $('#brandForm').reset();
+  $('#brandError').textContent = '';
+  $('#brandDlgTitle').textContent = b ? 'Edit brand' : 'Add brand';
+  if (b) $('#brandForm').name.value = b.name;
+  $('#brandDlg').showModal();
+}
+$('#newBrandBtn').onclick = () => { afterBrandSaved = null; openBrandForm(null); };
+$('#brandCancel').onclick = () => { afterBrandSaved = null; $('#brandDlg').close(); };
+
+$('#brandForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('#brandError').textContent = '';
+  try {
+    const saved = await api(brandEditing ? '/brands/' + brandEditing.id : '/brands', { method: brandEditing ? 'PATCH' : 'POST', json: { name: e.target.name.value } });
+    $('#brandDlg').close();
+    await Promise.all([loadBrands(), loadProducts()]);
+    if (afterBrandSaved) afterBrandSaved(saved);
+    afterBrandSaved = null;
+  } catch (err) { $('#brandError').textContent = err.message; }
+});
+
+async function deleteBrand(b) {
+  const note = b.products ? `\n\nIts ${b.products} product${b.products === 1 ? '' : 's'} will be kept but left without a brand.` : '';
+  if (!confirm(`Delete the brand "${b.name}"?${note}`)) return;
+  try {
+    await api('/brands/' + b.id, { method: 'DELETE' });
+    await Promise.all([loadBrands(), loadProducts()]);
+  } catch (err) { alert(err.message); }
+}
 
 // ---------- Orders: accept / reject / ship / deliver / cancel, payment, PDF invoice ----------
 const FILTERS = ['all', 'pending', 'accepted', 'shipped', 'delivered', 'rejected', 'cancelled'];

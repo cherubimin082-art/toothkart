@@ -346,3 +346,5 @@ dialog .phone input{border:0;border-radius:0;flex:1;min-width:0}
 dialog .phone input:focus{outline:0}
 dialog .otp-input{font-size:22px;letter-spacing:.5em;text-align:center;font-weight:600}
 #otpLinks .link:disabled{color:var(--muted);cursor:default;text-decoration:none}
+.cat small{display:block;margin-top:4px;font-size:11px;font-weight:500;color:var(--muted);transition:color .35s}
+.cat:hover small{color:#9ca3af}

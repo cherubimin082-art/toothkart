@@ -40,6 +40,19 @@ CREATE TABLE IF NOT EXISTS users (
   blocked INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+-- The list of categories an admin can choose from when adding a product. Products store the category name.
+CREATE TABLE IF NOT EXISTS categories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  icon TEXT NOT NULL DEFAULT '🦷',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+-- The list of brands an admin can choose from when adding a product. Products store the brand name.
+CREATE TABLE IF NOT EXISTS brands (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE IF NOT EXISTS products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -154,6 +167,23 @@ if (!ordersSql.includes("'pending'")) {
     db.exec('PRAGMA foreign_keys = ON');
   }
   console.log('Upgraded the orders table (placed -> pending).');
+}
+
+// First run with categories: start from the usual dental categories, plus any name products already use
+if (db.prepare('SELECT COUNT(*) AS n FROM categories').get().n === 0) {
+  const starters = [['Implant Prosthetics', '🦷'], ['Airotors', '💨'], ['Composite', '🧪'], ['Intra Oral Camera', '📷'],
+    ['Endomotors', '⚙️'], ['Autoclave', '♨️'], ['Rotary Files', '📏'], ['Cements', '🧱'], ['Impression Materials', '🥣'],
+    ['Brackets', '😁'], ['Sutures & Needles', '🪡'], ['Spare Parts', '🔩']];
+  const add = db.prepare('INSERT OR IGNORE INTO categories (name, icon) VALUES (?, ?)');
+  for (const [name, icon] of starters) add.run(name, icon);
+  for (const { category } of db.prepare("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND TRIM(category) != ''").all()) add.run(category.trim(), '🦷');
+}
+
+// First run with brands: start from the usual dental brands, plus any name products already use
+if (db.prepare('SELECT COUNT(*) AS n FROM brands').get().n === 0) {
+  const add = db.prepare('INSERT OR IGNORE INTO brands (name) VALUES (?)');
+  for (const name of ['Waldent', 'NSK', 'Dentaltech', 'GC', 'SuperEndo', 'Dentsply', 'Prime', 'Mani']) add.run(name);
+  for (const { brand } of db.prepare("SELECT DISTINCT brand FROM products WHERE brand IS NOT NULL AND TRIM(brand) != ''").all()) add.run(brand.trim());
 }
 
 // Seed the admin account once, from .env

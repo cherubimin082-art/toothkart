@@ -45,6 +45,8 @@ function parseBody(body) {
   return bad ? null : out;
 }
 
+const INVALID_BRAND = 'Choose a brand from the list (add it under Brands first if it is new)';
+const INVALID_CATEGORY = 'Choose a category from the list (add it under Categories first if it is new)';
 const INVALID = 'name, price (>=0), discount_percent (0-100) and stock (whole number >=0) are required';
 
 // Public: list with search / filters / pagination
@@ -72,9 +74,19 @@ router.get('/:id', (req, res) => {
 });
 
 // Admin: create (multipart/form-data, optional "image" file)
+// Returns the category exactly as listed, or undefined if it is not in the list
+const listedBrand = name => db.prepare('SELECT name FROM brands WHERE name = ?').get(name)?.name;
+const listedCategory = name => db.prepare('SELECT name FROM categories WHERE name = ?').get(name)?.name;
+
 router.post('/', requireAdmin, upload.single('image'), (req, res) => {
   const d = parseBody(req.body);
   if (!d) { removeImage(req.file?.filename); return res.status(400).json({ error: INVALID }); }
+  d.category = d.category && listedCategory(d.category);
+  if (!d.category) { removeImage(req.file?.filename); return res.status(400).json({ error: INVALID_CATEGORY }); }
+  if (d.brand) {
+    d.brand = listedBrand(d.brand);
+    if (!d.brand) { removeImage(req.file?.filename); return res.status(400).json({ error: INVALID_BRAND }); }
+  }
   const info = db.prepare(
     `INSERT INTO products (name, brand, category, description, price, discount_percent, stock, image)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
@@ -89,6 +101,14 @@ router.put('/:id', requireAdmin, upload.single('image'), (req, res) => {
   if (!cur) { removeImage(req.file?.filename); return res.status(404).json({ error: 'Product not found' }); }
   const d = parseBody({ ...cur, ...req.body });
   if (!d) { removeImage(req.file?.filename); return res.status(400).json({ error: INVALID }); }
+  if (d.category) {
+    d.category = listedCategory(d.category);
+    if (!d.category) { removeImage(req.file?.filename); return res.status(400).json({ error: INVALID_CATEGORY }); }
+  }
+  if (d.brand) {
+    d.brand = listedBrand(d.brand);
+    if (!d.brand) { removeImage(req.file?.filename); return res.status(400).json({ error: INVALID_BRAND }); }
+  }
   const image = req.file ? req.file.filename : cur.image;
   db.prepare(
     `UPDATE products SET name=?, brand=?, category=?, description=?, price=?, discount_percent=?, stock=?, image=? WHERE id=?`

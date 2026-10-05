@@ -24,6 +24,8 @@
       <div class="brand">Tooth<span>Kart</span> <small>Admin</small></div>
       <nav>
         <button data-tab="products" class="tab on">Products</button>
+        <button data-tab="categories" class="tab">Categories</button>
+        <button data-tab="brands" class="tab">Brands</button>
         <button data-tab="orders" class="tab">Orders</button>
         <button data-tab="suggestions" class="tab">Suggestions</button>
         <button data-tab="users" class="tab">Users</button>
@@ -47,6 +49,36 @@
           </table>
         </div>
         <p id="empty" class="muted" hidden>No products yet. Click "Add product".</p>
+      </section>
+
+      <section id="tab-categories" hidden>
+        <div class="bar">
+          <h2>Categories</h2>
+          <button class="btn" id="newCatBtn">+ Add category</button>
+        </div>
+        <p class="sub hint">These are the categories you can pick when adding a product. They also appear as tiles on the storefront.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Icon</th><th>Category</th><th>Products</th><th>Actions</th></tr></thead>
+            <tbody id="catRows"></tbody>
+          </table>
+        </div>
+        <p id="noCats" class="muted" hidden>No categories yet. Click "Add category".</p>
+      </section>
+
+      <section id="tab-brands" hidden>
+        <div class="bar">
+          <h2>Brands</h2>
+          <button class="btn" id="newBrandBtn">+ Add brand</button>
+        </div>
+        <p class="sub hint">These are the brands you can pick when adding a product. They also appear in the "Top Brands" strip on the storefront.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Brand</th><th>Products</th><th>Actions</th></tr></thead>
+            <tbody id="brandRows"></tbody>
+          </table>
+        </div>
+        <p id="noBrands" class="muted" hidden>No brands yet. Click "Add brand".</p>
       </section>
 
       <section id="tab-orders" hidden>
@@ -96,8 +128,8 @@
       <h3 id="dlgTitle">Add product</h3>
       <div class="grid2">
         <label class="full">Name<input name="name" required maxlength="150"></label>
-        <label>Brand<input name="brand"></label>
-        <label>Category<input name="category"></label>
+        <label>Brand <span class="sub">(optional)</span><select name="brand" id="brandSelect"></select></label>
+        <label>Category<select name="category" id="catSelect" required></select></label>
         <label>Price (₹)<input name="price" type="number" min="0" step="0.01" required></label>
         <label>Discount (%)<input name="discount_percent" type="number" min="0" max="100" step="0.1" value="0"></label>
         <label>Stock<input name="stock" type="number" min="0" step="1" value="0" required></label>
@@ -111,6 +143,37 @@
       <p id="formError" class="error" role="alert"></p>
       <div class="actions">
         <button type="button" class="btn ghost" id="cancel">Cancel</button>
+        <button type="submit" class="btn">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Category form -->
+  <dialog id="catDlg">
+    <form id="catForm">
+      <h3 id="catDlgTitle">Add category</h3>
+      <div class="grid2">
+        <label class="full">Name<input name="name" required maxlength="60" placeholder="e.g. Dental Chairs"></label>
+        <label class="full">Icon (one emoji, shown on the storefront)<input name="icon" maxlength="8" placeholder="🦷"></label>
+      </div>
+      <p id="catError" class="error" role="alert"></p>
+      <div class="actions">
+        <button type="button" class="btn ghost" id="catCancel">Cancel</button>
+        <button type="submit" class="btn">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Brand form -->
+  <dialog id="brandDlg">
+    <form id="brandForm">
+      <h3 id="brandDlgTitle">Add brand</h3>
+      <div class="grid2">
+        <label class="full">Name<input name="name" required maxlength="60" placeholder="e.g. Ivoclar"></label>
+      </div>
+      <p id="brandError" class="error" role="alert"></p>
+      <div class="actions">
+        <button type="button" class="btn ghost" id="brandCancel">Cancel</button>
         <button type="submit" class="btn">Save</button>
       </div>
     </form>

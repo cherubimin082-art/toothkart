@@ -8,12 +8,6 @@ const slidesData = [
   { tag: 'TOP BRANDS', t: 'Implant Motors', p: 'Precision torque control from trusted brands.', art: '⚙️', theme: 'slate' },
   { tag: 'IN STOCK', t: 'Sterilization Range', p: 'Autoclaves and UV chambers, delivered fast.', art: '♨️', theme: 'light' },
 ];
-const brands = ['Waldent', 'NSK', 'Dentaltech', 'GC', 'SuperEndo', 'Dentsply', 'Prime', 'Mani'];
-const categories = [
-  ['🦷', 'Implant Prosthetics'], ['💨', 'Airotors'], ['🧪', 'Composite'], ['📷', 'Intra Oral Camera'],
-  ['⚙️', 'Endomotors'], ['♨️', 'Autoclave'], ['📏', 'Rotary Files'], ['🧱', 'Cements'],
-  ['🥣', 'Impression Materials'], ['😁', 'Brackets'], ['🪡', 'Sutures & Needles'], ['🔩', 'Spare Parts'],
-];
 
 const $ = id => document.getElementById(id);
 const inr = n => '₹' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: Number.isInteger(+n) ? 0 : 2, maximumFractionDigits: 2 });
@@ -107,17 +101,40 @@ go(0);
 
 // ---------- Brands & categories (click to filter) ----------
 const brandLink = b => el('a', { className: 'brand', href: '#', textContent: b, onclick: e => { e.preventDefault(); setFilter({ brand: b }); } });
-// The list is repeated once so the sliding strip loops without a gap; the copy is hidden from keyboards and screen readers
-const brandCopies = brands.map(brandLink);
-brandCopies.forEach(a => { a.tabIndex = -1; a.setAttribute('aria-hidden', 'true'); });
-$('brands').replaceChildren(...brands.map(brandLink), ...brandCopies);
 
-$('categories').replaceChildren(...categories.map(([i, n], k) => {
-  const a = el('a', { className: 'cat reveal', href: '#', onclick: e => { e.preventDefault(); setFilter({ category: n }); } },
-    el('span', { className: 'ic', textContent: i }), n);
-  a.style.setProperty('--d', (k % 6) * 70 + 'ms');
-  return a;
-}));
+// The brand strip comes from the catalog, so a brand added in the admin appears here
+async function loadBrands() {
+  try {
+    const names = (await api('/brands')).map(b => b.name);
+    $('brandsSection').hidden = names.length === 0;
+    // Few brands would leave gaps in the sliding strip, so repeat the list until it is long enough,
+    // then repeat that whole set once more so the loop is seamless. Only the first set can be focused or read aloud.
+    const set = Array.from({ length: Math.ceil(12 / Math.max(names.length, 1)) }, () => names).flat();
+    const copy = set.map(brandLink);
+    copy.forEach(a => { a.tabIndex = -1; a.setAttribute('aria-hidden', 'true'); });
+    $('brands').replaceChildren(...set.map(brandLink), ...copy);
+  } catch {
+    $('brandsSection').hidden = true;
+  }
+}
+
+// The category tiles come from the catalog, so a category added in the admin appears here
+async function loadCategories() {
+  try {
+    const list = await api('/categories');
+    $('categoriesSection').hidden = list.length === 0;
+    $('categories').replaceChildren(...list.map((c, k) => {
+      const a = el('a', { className: 'cat reveal', href: '#', onclick: e => { e.preventDefault(); setFilter({ category: c.name }); } },
+        el('span', { className: 'ic', textContent: c.icon }), c.name,
+        el('small', { textContent: c.products ? `${c.products} product${c.products === 1 ? '' : 's'}` : 'Coming soon' }));
+      a.style.setProperty('--d', (k % 6) * 70 + 'ms');
+      return a;
+    }));
+    observeReveals();
+  } catch {
+    $('categoriesSection').hidden = true; // the products area already explains when the server is unreachable
+  }
+}
 
 function setFilter(f) {
   filter = f;
@@ -431,6 +448,8 @@ window.addEventListener('scroll', () => {
 
 // ---------- Start ----------
 observeReveals();
+loadBrands();
+loadCategories();
 loadProducts();
 if (token) {
   api('/auth/me').then(d => { setSession(token, d.user); refreshCart(); }).catch(() => setSession(null, null));

@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node --env-file=.env server.js",
     "dev": "node --watch --env-file=.env server.js",
-    "seed": "node --env-file=.env seed.js"
+    "seed": "node --env-file=.env seed.js",
+    "reset-admin": "node --env-file=.env reset-admin.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
