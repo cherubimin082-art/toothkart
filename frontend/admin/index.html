@@ -27,6 +27,8 @@
         <button data-tab="categories" class="tab">Categories</button>
         <button data-tab="brands" class="tab">Brands</button>
         <button data-tab="orders" class="tab">Orders</button>
+        <button data-tab="returns" class="tab">Returns</button>
+        <button data-tab="revenue" class="tab">Revenue</button>
         <button data-tab="suggestions" class="tab">Suggestions</button>
         <button data-tab="users" class="tab">Users</button>
       </nav>
@@ -95,6 +97,46 @@
         <p id="noOrders" class="muted" hidden>No orders here.</p>
       </section>
 
+      <section id="tab-revenue" hidden>
+        <div class="bar">
+          <h2>Revenue &amp; profit</h2>
+          <div class="chips" id="revRanges" role="group" aria-label="Time period"></div>
+        </div>
+        <p class="muted">Counts accepted, shipped and delivered orders. Orders that were refunded after a return are left out. Pending, rejected and cancelled orders are not counted.</p>
+        <div id="revNotice" class="rv-notice" hidden></div>
+        <div class="rv-kpis" id="revKpis"></div>
+        <div class="rv-card">
+          <div class="rv-head"><h3 id="revChartTitle">Trend</h3>
+            <div class="rv-legend"><span class="k-rev">Revenue</span><span class="k-pro">Profit</span></div></div>
+          <div id="revChart" class="rv-chart"></div>
+        </div>
+        <div class="rv-grid">
+          <div class="rv-card"><h3>Top products</h3><div id="revProducts"></div></div>
+          <div class="rv-card"><h3>By category</h3><div id="revCategories"></div></div>
+          <div class="rv-card"><h3>By brand</h3><div id="revBrands"></div></div>
+          <div class="rv-card"><h3>Payments</h3><div id="revPayments"></div></div>
+          <div class="rv-card"><h3>Orders by status</h3><div id="revStatuses"></div></div>
+          <div class="rv-card"><h3>Returns &amp; refunds</h3><div id="revReturns"></div></div>
+          <div class="rv-card"><h3>Customers</h3><div id="revCustomers"></div></div>
+          <div class="rv-card"><h3>Stock on hand</h3><div id="revStock"></div></div>
+        </div>
+      </section>
+
+      <section id="tab-returns" hidden>
+        <div class="bar">
+          <h2>Returns</h2>
+        </div>
+        <p class="muted">Customers can ask for a return within 7 days of delivery. Approve or reject each request; after you have paid the refund, mark it refunded.</p>
+        <div class="chips" id="returnFilters"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Total</th><th>Payment</th><th>Reason</th><th>Requested</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="returnRows"></tbody>
+          </table>
+        </div>
+        <p id="noReturns" class="muted" hidden>No return requests here.</p>
+      </section>
+
       <section id="tab-suggestions" hidden>
         <div class="bar"><h2>Product suggestions</h2></div>
         <div class="table-wrap">
@@ -134,11 +176,16 @@
         <label>Discount (%)<input name="discount_percent" type="number" min="0" max="100" step="0.1" value="0"></label>
         <label>Stock<input name="stock" type="number" min="0" step="1" value="0" required></label>
         <label>Final price<input id="finalPrice" readonly></label>
+        <label>Cost price (₹) <span class="sub">(optional, what it costs you)</span><input name="cost_price" type="number" min="0" step="0.01" placeholder="Needed to calculate profit"></label>
+        <label>Profit per unit<input id="unitProfit" readonly placeholder="Add a cost price"></label>
         <label class="full">Description<textarea name="description" rows="3"></textarea></label>
-        <label class="full">Image (JPG, PNG, WebP · max 3 MB)
-          <input name="image" type="file" accept="image/jpeg,image/png,image/webp">
+        <label class="full">Images <span class="sub">(JPG, PNG, WebP · max 3 MB each · up to 8 · the first one is the main picture · choose again to add more)</span>
+          <input name="images" id="imagesInput" type="file" multiple accept="image/jpeg,image/png,image/webp">
         </label>
-        <img id="preview" class="preview" alt="" hidden>
+        <div class="full gallery-edit" id="galleryEdit" hidden>
+          <p class="sub" id="galleryHint"></p>
+          <ul class="thumbs" id="thumbs"></ul>
+        </div>
       </div>
       <p id="formError" class="error" role="alert"></p>
       <div class="actions">

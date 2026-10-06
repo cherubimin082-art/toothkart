@@ -21,7 +21,21 @@ async function withItems(orders) {
     o.items = [];
   }
   for (const it of items) byId.get(it.order_id).items.push(it);
+  const returns = await db.prepare(`SELECT * FROM returns WHERE order_id IN (${ids.map(() => '?').join(',')})`).all(...ids);
+  for (const o of orders) o.return_request = null;
+  for (const r of returns) byId.get(r.order_id).return_request = r;
+  for (const o of orders) o.return_open_until = returnDeadline(o);
   return orders;
+}
+
+// Returns are accepted for 7 days after delivery (see the Returns page)
+const RETURN_DAYS = 7;
+const RETURN_REASONS = ['Wrong product received', 'Damaged product', 'Unused and sealed, no longer needed'];
+const parseUtc = s => new Date(String(s).replace(' ', 'T') + 'Z');
+function returnDeadline(o) {
+  if (o.status !== 'delivered') return null;
+  const from = parseUtc(o.delivered_at || o.created_at);
+  return new Date(from.getTime() + RETURN_DAYS * 86400000).toISOString();
 }
 
 async function loadOrder(id) {
@@ -45,7 +59,7 @@ router.post('/', requireAuth, async (req, res) => {
   if (!['COD', 'PREPAID'].includes(payment)) return res.status(400).json({ error: 'payment_method must be COD or PREPAID' });
 
   const rows = await db.prepare(
-    `SELECT c.quantity, p.id, p.name, p.price, p.discount_percent
+    `SELECT c.quantity, p.id, p.name, p.price, p.discount_percent, p.cost_price
      FROM cart_items c JOIN products p ON p.id = c.product_id WHERE c.user_id = ?`
   ).all(req.user.id);
   if (!rows.length) return res.status(400).json({ error: 'Your cart is empty' });
@@ -72,13 +86,13 @@ router.post('/', requireAuth, async (req, res) => {
         clean(name), clean(phone), clean(address), clean(pincode));
       const id = info.lastInsertRowid;
 
-      const addItem = tx.prepare('INSERT INTO order_items (order_id, product_id, name, unit_price, list_price, quantity) VALUES (?, ?, ?, ?, ?, ?)');
+      const addItem = tx.prepare('INSERT INTO order_items (order_id, product_id, name, unit_price, list_price, quantity, cost_price) VALUES (?, ?, ?, ?, ?, ?, ?)');
       const takeStock = tx.prepare('UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?');
       for (const l of lines) {
         if ((await takeStock.run(l.quantity, l.id, l.quantity)).changes === 0) {
           throw Object.assign(new Error(`"${l.name}" is no longer available in that quantity`), { status: 409 });
         }
-        await addItem.run(id, l.id, l.name, l.unit, l.price, l.quantity);
+        await addItem.run(id, l.id, l.name, l.unit, l.price, l.quantity, l.cost_price);
       }
       await tx.prepare('DELETE FROM cart_items WHERE user_id = ?').run(req.user.id);
       return id;
@@ -114,8 +128,9 @@ router.patch('/:id/status', requireAdmin, async (req, res) => {
     return res.status(409).json({ error: `A ${order.status} order cannot be changed to ${status}` });
   }
   await db.transaction(async tx => {
-    await tx.prepare('UPDATE orders SET status = ?, reject_reason = ? WHERE id = ?')
-      .run(status, status === 'rejected' ? reason || null : order.reject_reason, order.id);
+    await tx.prepare('UPDATE orders SET status = ?, reject_reason = ?, delivered_at = ? WHERE id = ?')
+      .run(status, status === 'rejected' ? reason || null : order.reject_reason,
+        status === 'delivered' ? new Date().toISOString().slice(0, 19).replace('T', ' ') : order.delivered_at, order.id);
     if (status === 'rejected' || status === 'cancelled') await restock(tx, order);
     if (status === 'delivered' && order.payment_method === 'COD') await tx.prepare("UPDATE orders SET payment_status = 'paid' WHERE id = ?").run(order.id);
   });
@@ -142,6 +157,38 @@ router.patch('/:id/cancel', requireAuth, async (req, res) => {
     await tx.prepare("UPDATE orders SET status = 'cancelled' WHERE id = ?").run(order.id);
     await restock(tx, order);
   });
+  res.json(await loadOrder(order.id));
+});
+
+// Customer: ask to return a delivered order, within 7 days of delivery
+router.post('/:id/return', requireAuth, async (req, res) => {
+  const order = await loadOrder(req.params.id);
+  if (!order || order.user_id !== req.user.id) return res.status(404).json({ error: 'Order not found' });
+  if (order.status !== 'delivered') return res.status(409).json({ error: 'Only delivered orders can be returned' });
+  if (order.return_request) return res.status(409).json({ error: 'A return has already been requested for this order' });
+  if (Date.now() > new Date(order.return_open_until).getTime()) {
+    return res.status(409).json({ error: `The ${RETURN_DAYS}-day return window for this order has ended` });
+  }
+  const reason = String(req.body?.reason ?? '').trim();
+  const details = String(req.body?.details ?? '').trim().slice(0, 500);
+  if (!RETURN_REASONS.includes(reason)) return res.status(400).json({ error: 'Please choose a reason for the return' });
+  await db.prepare('INSERT INTO returns (order_id, user_id, reason, details) VALUES (?, ?, ?, ?)')
+    .run(order.id, req.user.id, reason, details || null);
+  res.status(201).json(await loadOrder(order.id));
+});
+
+// Admin: approve / reject a return request, then mark it refunded
+const RETURN_NEXT = { requested: ['approved', 'rejected'], approved: ['refunded'] };
+router.patch('/:id/return', requireAdmin, async (req, res) => {
+  const { status } = req.body || {};
+  const note = String(req.body?.note ?? '').trim().slice(0, 200);
+  const order = await loadOrder(req.params.id);
+  if (!order || !order.return_request) return res.status(404).json({ error: 'Return request not found' });
+  if (!(RETURN_NEXT[order.return_request.status] || []).includes(status)) {
+    return res.status(409).json({ error: `A ${order.return_request.status} return cannot be changed to ${status}` });
+  }
+  await db.prepare("UPDATE returns SET status = ?, admin_note = ?, updated_at = datetime('now') WHERE id = ?")
+    .run(status, note || order.return_request.admin_note, order.return_request.id);
   res.json(await loadOrder(order.id));
 });
 

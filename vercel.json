@@ -14,6 +14,13 @@
     {
       "source": "/api/:path*",
       "destination": "/api"
-    }
+    },
+    { "source": "/product", "destination": "/product.html" },
+    { "source": "/contact", "destination": "/contact.html" },
+    { "source": "/shipping-policy", "destination": "/shipping-policy.html" },
+    { "source": "/returns", "destination": "/returns.html" },
+    { "source": "/about", "destination": "/about.html" },
+    { "source": "/careers", "destination": "/careers.html" },
+    { "source": "/events", "destination": "/events.html" }
   ]
 }

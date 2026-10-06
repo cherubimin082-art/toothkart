@@ -74,6 +74,14 @@ CREATE TABLE IF NOT EXISTS products (
   image TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+-- Extra photos of a product. products.image always holds the first one (the main picture shown on cards).
+CREATE TABLE IF NOT EXISTS product_images (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  image TEXT NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_product_images_product ON product_images (product_id, position);
 CREATE TABLE IF NOT EXISTS cart_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -108,6 +116,18 @@ CREATE TABLE IF NOT EXISTS order_items (
   unit_price REAL NOT NULL,
   list_price REAL NOT NULL,
   quantity INTEGER NOT NULL
+);
+-- A customer's request to return a delivered order (one per order)
+CREATE TABLE IF NOT EXISTS returns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id INTEGER NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reason TEXT NOT NULL,
+  details TEXT,
+  status TEXT NOT NULL DEFAULT 'requested' CHECK (status IN ('requested', 'approved', 'rejected', 'refunded')),
+  admin_note TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS suggestions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -178,6 +198,24 @@ db.ready = () => {
   if (!readyPromise) {
     readyPromise = (async () => {
       await client.executeMultiple(SCHEMA);
+      // Older databases have no delivery date: add it, and treat already-delivered orders as delivered on their order date
+      const cols = await db.prepare('PRAGMA table_info(orders)').all();
+      if (!cols.some(c => c.name === 'delivered_at')) {
+        await db.prepare('ALTER TABLE orders ADD COLUMN delivered_at TEXT').run();
+        await db.prepare("UPDATE orders SET delivered_at = created_at WHERE status = 'delivered'").run();
+      }
+      // What a product costs the shop (optional), and the cost recorded on each order line when the order was placed.
+      // Profit = selling price minus cost; lines without a cost are left out of the profit figures.
+      for (const [table, column] of [['products', 'cost_price'], ['order_items', 'cost_price']]) {
+        const have = await db.prepare(`PRAGMA table_info(${table})`).all();
+        if (!have.some(c => c.name === column)) await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} REAL`).run();
+      }
+      // Products made before multiple images existed: their single image becomes the first gallery image
+      await db.prepare(
+        `INSERT INTO product_images (product_id, image, position)
+         SELECT id, image, 0 FROM products
+         WHERE image IS NOT NULL AND image != '' AND id NOT IN (SELECT product_id FROM product_images)`
+      ).run();
       await seedLists();
       await seedAdmin();
     })().catch(err => { readyPromise = null; throw err; }); // try again on the next request

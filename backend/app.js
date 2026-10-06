@@ -43,7 +43,7 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 // On Vercel the website is served by Vercel itself and images live in Vercel Blob.
 if (!config.isServerless) {
   app.use('/uploads', express.static(config.uploadDir));
-  app.use(express.static(path.join(__dirname, '..', 'frontend')));
+  app.use(express.static(path.join(__dirname, '..', 'frontend'), { extensions: ['html'] }));
 }
 
 // eslint-disable-next-line no-unused-vars

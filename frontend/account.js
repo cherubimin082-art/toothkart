@@ -104,6 +104,52 @@ async function cancelOrder(o) {
   } catch (err) { if (!['Signed out', 'Blocked'].includes(err.message)) toast(err.message); }
 }
 
+const RETURN_REASONS = ['Wrong product received', 'Damaged product', 'Unused and sealed, no longer needed'];
+const RETURN_LABEL = { requested: 'Return requested', approved: 'Return approved', rejected: 'Return rejected', refunded: 'Refunded' };
+const RETURN_NOTE = {
+  requested: 'We have your return request and will review it soon.',
+  approved: 'Your return is approved. Pickup will be scheduled, then a quality check, then your refund in 5–7 business days.',
+  rejected: 'Sorry, this return could not be accepted.',
+  refunded: 'Your refund has been processed. COD orders are refunded to your bank account or UPI.'
+};
+
+// Panel under a delivered order: the return status, or a form to ask for a return while the 7-day window is open
+function returnPanel(o) {
+  if (o.status !== 'delivered') return null;
+  const r = o.return_request;
+  if (r) {
+    return el('div', { className: 'return-box' },
+      el('div', {}, el('b', { textContent: 'Return' }), ' ', el('span', { className: 'badge s-ret-' + r.status, textContent: RETURN_LABEL[r.status] })),
+      el('p', { className: 'onote', textContent: `${RETURN_NOTE[r.status]}${r.admin_note ? ' Note: ' + r.admin_note : ''}` }),
+      el('small', { textContent: `Reason: ${r.reason}` }));
+  }
+  const until = new Date(o.return_open_until);
+  if (Date.now() > until.getTime()) return el('p', { className: 'onote', textContent: 'The 7-day return window for this order has ended.' });
+
+  const select = el('select', { name: 'reason', required: true, id: 'rr' + o.id },
+    el('option', { value: '', textContent: 'Choose a reason…' }), ...RETURN_REASONS.map(t => el('option', { value: t, textContent: t })));
+  const details = el('textarea', { name: 'details', rows: 2, maxLength: 500, placeholder: 'Anything else we should know (optional)' });
+  const err = el('p', { className: 'form-error', role: 'alert' });
+  const form = el('form', { className: 'return-form', hidden: true },
+    el('label', { htmlFor: 'rr' + o.id, textContent: 'Why are you returning this order?' }), select, details,
+    el('small', { textContent: 'Only unused items in sealed packaging, or wrong/damaged products, can be returned. Opened consumables, sterile/disposable items and custom orders are not eligible.' }),
+    err,
+    el('button', { className: 'btn', type: 'submit', textContent: 'Submit return request' }));
+  form.onsubmit = async e => {
+    e.preventDefault();
+    err.textContent = '';
+    try {
+      await api(`/orders/${o.id}/return`, { method: 'POST', json: { reason: select.value, details: details.value } });
+      toast('Return requested');
+      loadOrders();
+    } catch (ex) { if (!['Signed out', 'Blocked'].includes(ex.message)) err.textContent = ex.message; }
+  };
+  const open = el('button', { className: 'btn ghost', type: 'button', textContent: '↩ Return items' });
+  open.onclick = () => { form.hidden = !form.hidden; if (!form.hidden) select.focus(); };
+  return el('div', { className: 'return-box' },
+    el('small', { textContent: `Return window open until ${until.toLocaleDateString('en-IN', { dateStyle: 'medium' })}` }), open, form);
+}
+
 function orderCard(o) {
   const actions = el('div', { className: 'ocard-actions' });
   if (['accepted', 'shipped', 'delivered'].includes(o.status)) {
@@ -130,7 +176,8 @@ function orderCard(o) {
         el('span', { textContent: `Phone: ${o.ship_phone}` }),
         el('span', { className: 'pay-line', textContent: paymentText(o) })),
       el('div', { className: 'ototal' }, el('small', { textContent: 'Order total' }), el('b', { textContent: inr(o.total) }))),
-    actions);
+    actions,
+    returnPanel(o) || '');
   return card;
 }
 

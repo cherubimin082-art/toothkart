@@ -158,6 +158,8 @@ async function loadProducts() {
   const label = filter.q ? `Results for "${filter.q}"` : filter.onOffer ? 'Offers' : filter.category || filter.brand || 'Products';
   $('productsTitle').textContent = label;
   $('clearFilter').hidden = !Object.keys(filter).length;
+  // Shimmering placeholders while the products load
+  $('products').replaceChildren(...Array.from({ length: 4 }, () => el('div', { className: 'skel', 'aria-hidden': 'true' }, ...Array.from({ length: 5 }, () => el('i')))));
   try {
     const data = await api('/products?' + params);
     $('products').replaceChildren(...data.products.map(card));
@@ -178,10 +180,11 @@ function card(p, i) {
   const price = el('div', { className: 'price' }, el('b', { textContent: inr(p.final_price) }));
   if (p.discount_percent > 0) price.append(el('s', { textContent: inr(p.price) }), el('em', { textContent: 'Save ' + inr(p.price - p.final_price) }));
   const btn = el('button', { className: 'add', textContent: p.stock > 0 ? 'Add to cart' : 'Out of stock', disabled: p.stock <= 0, onclick: () => addToCart(p) });
+  const href = '/product?id=' + p.id;
   const c = el('div', { className: 'card reveal' },
     ...(p.discount_percent > 0 ? [el('span', { className: 'ribbon', textContent: Math.round(p.discount_percent) + '% OFF' })] : []),
-    el('div', { className: 'img' }, img),
-    el('small', { textContent: p.brand || p.category || '' }), el('h3', { textContent: p.name }), price,
+    el('a', { className: 'img', href, tabIndex: -1, 'aria-hidden': 'true' }, img),
+    el('small', { textContent: p.brand || p.category || '' }), el('h3', {}, el('a', { href, textContent: p.name })), price,
     ...(p.stock > 0 && p.stock <= 5 ? [el('span', { className: 'low', textContent: `Only ${p.stock} left` })] : []),
     btn);
   c.style.setProperty('--d', (i % 4) * 80 + 'ms'); // cards slide in one after another
@@ -389,21 +392,66 @@ $('checkoutClose').onclick = () => $('checkoutDlg').close();
 $('checkoutForm').addEventListener('submit', async e => {
   e.preventDefault();
   $('placeBtn').disabled = true;
+  $('placeBtn').classList.add('busy');
+  $('placeBtn').textContent = 'Placing your order…';
   try {
     const order = await api('/orders', { method: 'POST', json: Object.fromEntries(new FormData(e.target)) });
     $('checkoutDlg').close();
     e.target.reset();
     closeDrawer();
     renderCart(null);
-    toast(`Order #${order.id} placed (${order.payment_method === 'COD' ? 'cash on delivery' : 'prepaid'}). Total ${inr(order.total)}. We'll confirm it shortly.`);
+    showOrderSuccess(order);
     refreshCart();
     loadProducts(); // stock has changed
   } catch (err) {
     $('checkoutError').textContent = err.message;
   } finally {
     $('placeBtn').disabled = false;
+    $('placeBtn').classList.remove('busy');
+    $('placeBtn').textContent = 'Place order';
   }
 });
+
+// Celebration after an order is placed: animated tick, confetti and the order summary
+function showOrderSuccess(order) {
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cod = order.payment_method === 'COD';
+  const close = () => { wrap.classList.add('leaving'); setTimeout(() => wrap.remove(), 250); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  const tick = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  tick.setAttribute('viewBox', '0 0 52 52');
+  tick.setAttribute('class', 'os-tick');
+  tick.setAttribute('aria-hidden', 'true');
+  tick.innerHTML = '<circle class="os-circle" cx="26" cy="26" r="24" fill="none"/><path class="os-check" fill="none" d="M14 27l8 8 16-17"/>';
+  const wrap = el('div', { className: 'os-wrap', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'osTitle' },
+    el('div', { className: 'os-card' },
+      tick,
+      el('h2', { id: 'osTitle', textContent: 'Order placed!' }),
+      el('p', { className: 'os-sub', textContent: 'Thank you for shopping with ToothKart. We will confirm your order shortly.' }),
+      el('dl', { className: 'os-sum' },
+        el('dt', { textContent: 'Order' }), el('dd', { textContent: '#' + order.id }),
+        el('dt', { textContent: 'Total' }), el('dd', { textContent: inr(order.total) }),
+        el('dt', { textContent: 'Payment' }), el('dd', { textContent: cod ? 'Cash on delivery' : 'Prepaid (we confirm your payment after accepting the order)' })),
+      el('div', { className: 'os-actions' },
+        el('a', { className: 'btn', href: 'account.html', textContent: 'View my orders' }),
+        el('button', { className: 'btn ghost', type: 'button', textContent: 'Continue shopping', onclick: close }))));
+  wrap.addEventListener('click', e => { if (e.target === wrap) close(); });
+  if (!still) {
+    const colors = ['#ff9900', '#131921', '#ffd28a', '#16a34a', '#fff'];
+    const confetti = el('div', { className: 'os-confetti', 'aria-hidden': 'true' });
+    for (let i = 0; i < 60; i++) {
+      const p = el('i');
+      const angle = Math.random() * Math.PI * 2, dist = 140 + Math.random() * 260;
+      p.style.cssText = `--x:${Math.cos(angle) * dist}px;--y:${Math.sin(angle) * dist - 80}px;--r:${Math.random() * 720 - 360}deg;background:${colors[i % colors.length]};` +
+        `width:${6 + Math.random() * 6}px;height:${10 + Math.random() * 8}px;animation-delay:${Math.random() * 0.25}s;animation-duration:${1.1 + Math.random() * 0.9}s`;
+      confetti.append(p);
+    }
+    wrap.append(confetti);
+  }
+  document.body.append(wrap);
+  document.addEventListener('keydown', onKey);
+  wrap.querySelector('a.btn').focus();
+}
 
 // ---------- Pincode ----------
 $('pincodeBtn').onclick = () => {
@@ -454,7 +502,21 @@ api('/auth/options').then(o => { if (!o.otp) document.querySelector('.auth-tabs'
 observeReveals();
 loadBrands();
 loadCategories();
+// Links from the product page: /?category=…  /?brand=…
+{
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('category')) filter = { category: qs.get('category') };
+  else if (qs.get('brand')) filter = { brand: qs.get('brand') };
+}
 loadProducts();
 if (token) {
-  api('/auth/me').then(d => { setSession(token, d.user); refreshCart(); }).catch(() => setSession(null, null));
+  api('/auth/me').then(d => {
+    setSession(token, d.user);
+    refreshCart();
+    // "Cart" and "Buy now" on the product page come back here
+    const open = new URLSearchParams(location.search).get('open');
+    if (open === 'cart') openDrawer();
+    if (open === 'checkout') { openDrawer(); openCheckout(); }
+    if (open) history.replaceState(null, '', '/');
+  }).catch(() => setSession(null, null));
 }

@@ -84,8 +84,12 @@ document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
   $('#tab-categories').hidden = b.dataset.tab !== 'categories';
   $('#tab-brands').hidden = b.dataset.tab !== 'brands';
   $('#tab-orders').hidden = b.dataset.tab !== 'orders';
+  $('#tab-returns').hidden = b.dataset.tab !== 'returns';
+  $('#tab-revenue').hidden = b.dataset.tab !== 'revenue';
+  if (b.dataset.tab === 'revenue') loadRevenue();
   $('#tab-suggestions').hidden = b.dataset.tab !== 'suggestions';
   $('#tab-users').hidden = b.dataset.tab !== 'users';
+  if (b.dataset.tab === 'returns') loadOrders();
   if (b.dataset.tab === 'suggestions') loadSuggestions();
   if (b.dataset.tab === 'users') loadUsers();
   if (b.dataset.tab === 'categories') loadCategories();
@@ -96,13 +100,13 @@ document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
 // ---------- Stats ----------
 async function loadStats() {
   const s = await api('/admin/stats');
-  const items = [['Pending orders', s.pendingOrders, 'orders'], ['New suggestions', s.newSuggestions, 'suggestions'], ['Orders', s.orders], ['Revenue', inr(s.revenue)],
+  const items = [['Pending orders', s.pendingOrders, 'orders'], ['Pending returns', s.pendingReturns, 'returns'], ['New suggestions', s.newSuggestions, 'suggestions'], ['Orders', s.orders], ['Revenue', inr(s.revenue), 'revenue'],
     ['Customers', s.customers], ['Blocked users', s.blockedUsers], ['Products', s.products], ['On offer', s.onOffer],
     ['Low stock (≤5)', s.lowStock], ['Units in carts', s.cartItems]];
   // A tile with a tab name turns red and jumps to that tab when it has something waiting
   $('#stats').replaceChildren(...items.map(([label, v, tab]) => {
-    const hot = tab && v > 0;
-    return el('div', { className: 'stat' + (hot ? ' hot' : ''), onclick: hot ? () => document.querySelector(`[data-tab=${tab}]`).click() : null },
+    const hot = tab && tab !== 'revenue' && v > 0;
+    return el('div', { className: 'stat' + (hot ? ' hot' : ''), onclick: hot || tab === 'revenue' ? () => document.querySelector(`[data-tab=${tab}]`).click() : null },
       el('b', { textContent: v }), el('span', { textContent: label }));
   }));
 }
@@ -146,26 +150,69 @@ const form = $('#productForm');
 function updateFinal() {
   const price = Number(form.price.value), d = Number(form.discount_percent.value) || 0;
   $('#finalPrice').value = form.price.value === '' ? '' : inr(price * (1 - d / 100));
+  // profit on one unit = selling price after discount minus cost
+  const cost = form.cost_price.value;
+  const unit = price * (1 - d / 100) - Number(cost);
+  $('#unitProfit').value = cost === '' || form.price.value === '' ? '' : `${inr(unit)} (${price ? Math.round((unit / (price * (1 - d / 100) || 1)) * 100) : 0}%)`;
 }
 form.price.addEventListener('input', updateFinal);
 form.discount_percent.addEventListener('input', updateFinal);
+form.cost_price.addEventListener('input', updateFinal);
 
-form.image.addEventListener('change', () => {
-  const f = form.image.files[0];
-  $('#preview').hidden = !f;
-  if (f) $('#preview').src = URL.createObjectURL(f);
+// ---- Images: existing ones (can be removed or made main) plus the files just picked ----
+const MAX_IMAGES = 8;
+let keptImages = [];      // images already saved for this product, in order: [{ id, url }]
+let removedIds = [];      // saved images the admin removed
+let mainId = null;        // saved image chosen as the main picture
+let newPreviews = [];     // object URLs of the picked files
+let pickedFiles = [];     // files picked so far; every pick is added to this list instead of replacing it
+
+function renderGallery() {
+  newPreviews.forEach(u => URL.revokeObjectURL(u));
+  const files = pickedFiles;
+  newPreviews = files.map(f => URL.createObjectURL(f));
+  const show = keptImages.length + files.length > 0;
+  $('#galleryEdit').hidden = !show;
+  const total = keptImages.length + files.length;
+  $('#galleryHint').textContent = total > MAX_IMAGES
+    ? `Too many images: ${total}. The most is ${MAX_IMAGES}.`
+    : `${total} of ${MAX_IMAGES} images. ` + (keptImages.length ? 'Use “Make main” to choose the first picture, or ✕ to remove one.' : '');
+  const mainSaved = keptImages.find(i => i.id === mainId) || keptImages[0];
+  $('#thumbs').replaceChildren(
+    ...keptImages.map(i => {
+      const isMain = mainSaved && i.id === mainSaved.id;
+      return el('li', { className: isMain ? 'is-main' : '' },
+        el('img', { src: i.url, alt: '' }),
+        isMain ? el('span', { className: 'tag', textContent: 'Main' }) : el('button', { type: 'button', className: 'mk', textContent: 'Make main', onclick: () => { mainId = i.id; renderGallery(); } }),
+        el('button', { type: 'button', className: 'rm', textContent: '✕', 'aria-label': 'Remove this image', onclick: () => { removedIds.push(i.id); keptImages = keptImages.filter(k => k !== i); renderGallery(); } }));
+    }),
+    ...newPreviews.map((u, k) => el('li', { className: !keptImages.length && k === 0 ? 'is-main' : '' },
+      el('img', { src: u, alt: '' }), el('span', { className: 'tag new', textContent: !keptImages.length && k === 0 ? 'Main · new' : 'New' }),
+      el('button', { type: 'button', className: 'rm', textContent: '✕', 'aria-label': 'Remove this image', onclick: () => { pickedFiles = pickedFiles.filter((_, j) => j !== k); renderGallery(); } }))));
+}
+// Each pick adds to the list (a plain file input would forget the earlier pick)
+form.images.addEventListener('change', () => {
+  for (const f of form.images.files) {
+    if (!pickedFiles.some(p => p.name === f.name && p.size === f.size && p.lastModified === f.lastModified)) pickedFiles.push(f);
+  }
+  form.images.value = '';
+  renderGallery();
+  $('#galleryEdit').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); // show the pictures that were just added
 });
 
 function openForm(p) {
   editingId = p ? p.id : null;
   form.reset();
+  keptImages = p ? [...(p.images || [])] : [];
+  pickedFiles = [];
+  removedIds = [];
+  mainId = null;
   $('#formError').textContent = '';
   $('#dlgTitle').textContent = p ? 'Edit product' : 'Add product';
   fillCategorySelect(p ? p.category : '');
   fillBrandSelect(p ? p.brand : '');
-  if (p) for (const k of ['name', 'description', 'price', 'discount_percent', 'stock']) form[k].value = p[k] ?? '';
-  $('#preview').hidden = !(p && p.image_url);
-  if (p && p.image_url) $('#preview').src = p.image_url;
+  if (p) for (const k of ['name', 'description', 'price', 'discount_percent', 'stock', 'cost_price']) form[k].value = p[k] ?? '';
+  renderGallery();
   updateFinal();
   $('#dlg').showModal();
 }
@@ -175,13 +222,52 @@ $('#cancel').onclick = () => $('#dlg').close();
 form.addEventListener('submit', async e => {
   e.preventDefault();
   $('#formError').textContent = '';
-  const body = new FormData(form);
-  if (!form.image.files[0]) body.delete('image'); // keep the existing image when editing
+  if (keptImages.length + pickedFiles.length > MAX_IMAGES) return ($('#formError').textContent = `A product can have at most ${MAX_IMAGES} images`);
+  // Hosting limits the size of one request (about 4.5 MB on Vercel), so images are sent in small batches:
+  // the first request saves the product details with the first batch, later requests add the rest.
+  const BATCH_BYTES = 3.5 * 1024 * 1024;
+  const batches = [[]];
+  let size = 0;
+  for (const f of pickedFiles) {
+    if (batches.at(-1).length && size + f.size > BATCH_BYTES) { batches.push([]); size = 0; }
+    batches.at(-1).push(f);
+    size += f.size;
+  }
+  const submit = $('#productForm button[type=submit]');
+  submit.disabled = true;
   try {
-    await api(editingId ? '/products/' + editingId : '/products', { method: editingId ? 'PUT' : 'POST', body });
+    const body = new FormData(form);
+    body.delete('images');
+    for (const f of batches[0]) body.append('images', f);
+    if (editingId) {
+      body.set('remove_images', JSON.stringify(removedIds));
+      if (mainId) body.set('main_image', mainId);
+    }
+    const saved = await api(editingId ? '/products/' + editingId : '/products', { method: editingId ? 'PUT' : 'POST', body });
+    // The product now exists (and the removals are done): if a later batch fails, Save carries on from there
+    editingId = saved.id;
+    keptImages = saved.images;
+    removedIds = [];
+    mainId = null;
+    pickedFiles = pickedFiles.filter(f => !batches[0].includes(f));
+    for (let k = 1; k < batches.length; k++) {
+      submit.textContent = `Uploading images… ${k + 1}/${batches.length}`;
+      const more = new FormData();
+      for (const f of batches[k]) more.append('images', f);
+      const res = await api('/products/' + editingId, { method: 'PUT', body: more });
+      keptImages = res.images;
+      pickedFiles = pickedFiles.filter(f => !batches[k].includes(f));
+    }
     $('#dlg').close();
     await Promise.all([loadProducts(), loadStats()]);
-  } catch (err) { $('#formError').textContent = err.message; }
+  } catch (err) {
+    $('#formError').textContent = err.message + (editingId ? ' (the product was saved; press Save to retry the remaining images)' : '');
+    renderGallery();
+    loadProducts();
+  } finally {
+    submit.disabled = false;
+    submit.textContent = 'Save';
+  }
 });
 
 // ---------- Categories ----------
@@ -358,6 +444,43 @@ function renderOrders() {
   const shown = orderFilter === 'all' ? allOrders : allOrders.filter(o => o.status === orderFilter);
   $('#noOrders').hidden = shown.length > 0;
   $('#orderRows').replaceChildren(...shown.map(orderRow));
+  renderReturns();
+}
+
+// ---------- Returns: approve / reject, then mark refunded ----------
+const RETURN_FILTERS = ['requested', 'approved', 'refunded', 'rejected', 'all'];
+let returnFilter = 'requested';
+
+function renderReturns() {
+  const all = allOrders.filter(o => o.return_request);
+  const count = f => (f === 'all' ? all.length : all.filter(o => o.return_request.status === f).length);
+  $('#returnFilters').replaceChildren(...RETURN_FILTERS.map(f =>
+    el('button', { className: 'chip' + (f === returnFilter ? ' on' : ''), textContent: `${f[0].toUpperCase() + f.slice(1)} (${count(f)})`, onclick: () => { returnFilter = f; renderReturns(); } })));
+  const shown = (returnFilter === 'all' ? all : all.filter(o => o.return_request.status === returnFilter))
+    .sort((a, b) => String(b.return_request.created_at).localeCompare(a.return_request.created_at));
+  $('#noReturns').hidden = shown.length > 0;
+  $('#returnRows').replaceChildren(...shown.map(returnRow));
+}
+
+function returnRow(o) {
+  const r = o.return_request;
+  const act = (label, cls, fn) => el('button', { className: 'act ' + cls, textContent: label, onclick: fn });
+  const actions = el('div', { className: 'order-actions' });
+  if (r.status === 'requested') actions.append(act('✓ Approve', 'go', () => setReturn(o, 'approved')), act('✕ Reject', 'no', () => rejectReturn(o)));
+  if (r.status === 'approved') actions.append(act('Mark refunded', 'go', () => setReturn(o, 'refunded')));
+  const refundTo = o.payment_method === 'COD' ? 'Refund to bank account / UPI' : 'Refund to original payment method';
+  return el('tr', {},
+    el('td', {}, el('b', { textContent: '#' + o.id }), el('div', { className: 'sub', textContent: 'Delivered ' + when(o.delivered_at || o.created_at) })),
+    el('td', {}, el('b', { textContent: o.customer_name || 'Unknown' }), el('div', { className: 'sub', textContent: o.customer_email || '' }),
+      el('div', { className: 'sub', textContent: 'Phone: ' + o.ship_phone })),
+    el('td', { className: 'wide', textContent: o.items.map(i => `${i.quantity}× ${i.name}`).join(', ') }),
+    el('td', { textContent: inr(o.total) }),
+    el('td', {}, el('b', { textContent: o.payment_method === 'COD' ? 'Cash on delivery' : 'Prepaid' }), el('div', { className: 'sub', textContent: refundTo })),
+    el('td', { className: 'wide' }, el('b', { textContent: r.reason }), ...(r.details ? [el('div', { className: 'sub', textContent: r.details })] : []),
+      ...(r.admin_note ? [el('div', { className: 'sub', textContent: 'Your note: ' + r.admin_note })] : [])),
+    el('td', { textContent: when(r.created_at) }),
+    el('td', {}, el('span', { className: 'badge ' + (r.status === 'rejected' ? 'bad' : r.status === 'requested' ? 'warn' : 'ok'), textContent: r.status })),
+    el('td', {}, actions));
 }
 
 function orderRow(o) {
@@ -384,8 +507,30 @@ function orderRow(o) {
     el('td', {}, el('b', { textContent: o.payment_method === 'COD' ? 'Cash on delivery' : 'Prepaid' }), el('div', {}, payBadge)),
     el('td', { textContent: inr(o.total) }),
     el('td', {}, el('span', { className: 'badge s-' + o.status, textContent: o.status }),
-      ...(o.reject_reason ? [el('div', { className: 'sub', textContent: 'Reason: ' + o.reject_reason })] : [])),
+      ...(o.reject_reason ? [el('div', { className: 'sub', textContent: 'Reason: ' + o.reject_reason })] : []),
+      ...returnInfo(o)),
     el('td', {}, actions));
+}
+
+// On the Orders tab a return only shows its status; it is handled in the Returns tab
+function returnInfo(o) {
+  const r = o.return_request;
+  if (!r) return [];
+  return [el('div', { className: 'sub' }, el('span', { className: 'badge ' + (r.status === 'rejected' ? 'bad' : r.status === 'requested' ? 'warn' : 'ok'), textContent: 'Return: ' + r.status }))];
+}
+
+async function setReturn(o, status, note) {
+  if (status === 'refunded' && !confirm(`Mark the return for order #${o.id} as refunded? Pay the customer ${inr(o.total)} (${o.payment_method === 'COD' ? 'to their bank/UPI' : 'to the original payment method'}) first.`)) return;
+  try {
+    await api(`/orders/${o.id}/return`, { method: 'PATCH', json: { status, note } });
+    await Promise.all([loadOrders(), loadStats()]);
+  } catch (err) { alert(err.message); }
+}
+
+function rejectReturn(o) {
+  const note = prompt(`Reject the return for order #${o.id}?\n\nReason (shown to the customer, optional):`);
+  if (note === null) return;
+  setReturn(o, 'rejected', note);
 }
 
 async function setStatus(o, status, reason) {
@@ -519,4 +664,132 @@ async function removeUser(u) {
 // ---------- Resume session ----------
 if (token) {
   api('/auth/me').then(d => d.user.role === 'admin' ? start(d.user) : signOut()).catch(() => {});
+}
+
+// ---------- Revenue & profit ----------
+const REV_RANGES = [['7', '7 days'], ['30', '30 days'], ['90', '90 days'], ['365', '12 months'], ['all', 'All time']];
+let revRange = '30';
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const svg = (tag, attrs = {}, ...kids) => {
+  const e = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  e.append(...kids);
+  return e;
+};
+const pct = v => (v === null || v === undefined ? '—' : v.toLocaleString('en-IN', { maximumFractionDigits: 1 }) + '%');
+const money = v => (v === null || v === undefined ? '—' : inr(v));
+
+async function loadRevenue() {
+  $('#revRanges').replaceChildren(...REV_RANGES.map(([k, label]) =>
+    el('button', { className: 'chip' + (k === revRange ? ' on' : ''), textContent: label, onclick: () => { revRange = k; loadRevenue(); } })));
+  try {
+    renderRevenue(await api('/admin/analytics?range=' + revRange));
+  } catch (err) { alert(err.message); }
+}
+
+function renderRevenue(d) {
+  const c = d.current, label = REV_RANGES.find(r => r[0] === d.range)[1];
+  const hasCost = c.coverage !== null && c.coverage > 0;
+
+  // Warn when profit is not based on all sales
+  const notice = $('#revNotice');
+  const parts = [];
+  if (d.inventory.missing_cost > 0) parts.push(`${d.inventory.missing_cost} of ${d.inventory.products} products have no cost price`);
+  if (c.revenue > 0 && (c.coverage === null || c.coverage < 99.9)) parts.push(hasCost ? `profit covers ${pct(c.coverage)} of this period's sales` : 'no sales in this period have a cost price, so profit cannot be shown');
+  notice.hidden = parts.length === 0;
+  notice.replaceChildren(el('b', { textContent: 'Profit needs cost prices. ' }), parts.join('; ') + '. Open Products → Edit and fill in “Cost price” to complete the picture.');
+
+  // Tiles
+  const delta = v => (v === null || v === undefined ? null : el('small', { className: v >= 0 ? 'up' : 'down', textContent: `${v >= 0 ? '▲' : '▼'} ${Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 1 })}% vs previous ${label}` }));
+  const tile = (title, value, sub, cls = '') => el('div', { className: 'rv-kpi ' + cls }, el('span', { textContent: title }), el('b', { textContent: value }), ...(sub ? [typeof sub === 'string' ? el('small', { textContent: sub }) : sub] : []));
+  $('#revKpis').replaceChildren(
+    tile('Revenue', inr(c.revenue), delta(d.changes && d.changes.revenue) || `${c.orders} order${c.orders === 1 ? '' : 's'}`, 'main'),
+    tile('Total profit', hasCost ? inr(c.profit) : '—', hasCost ? (delta(d.changes && d.changes.profit) || `Margin ${pct(c.margin)}`) : 'Add cost prices', 'profit'),
+    tile('Profit margin', hasCost ? pct(c.margin) : '—', hasCost ? `On ${pct(c.coverage)} of sales` : null),
+    tile('Orders', String(c.orders), delta(d.changes && d.changes.orders) || null),
+    tile('Average order value', inr(c.avg_order)),
+    tile('Units sold', String(c.units)),
+    tile('Cost of goods', hasCost ? inr(c.cost) : '—'),
+    tile('Discounts given', inr(c.discounts), 'Offers & discounts customers used'),
+    tile('Refunded', inr(d.returns.refunded_amount), `${d.returns.refunded_orders} order${d.returns.refunded_orders === 1 ? '' : 's'} refunded`));
+
+  // Chart
+  $('#revChartTitle').textContent = `${d.granularity === 'month' ? 'Monthly' : 'Daily'} revenue and profit`;
+  $('#revChart').replaceChildren(buildChart(d.series, d.granularity, hasCost));
+
+  // Breakdown lists
+  const rows = (list, withProfit = true) => {
+    if (!list.length) return el('p', { className: 'muted', textContent: 'No sales in this period.' });
+    const top = Math.max(...list.map(r => r.revenue), 1);
+    return el('ul', { className: 'rv-list' }, ...list.map(r => el('li', {},
+      el('div', { className: 'rv-row' }, el('span', { className: 'rv-name', textContent: r.label, title: r.label }),
+        el('span', { className: 'rv-num', textContent: inr(r.revenue) }),
+        ...(withProfit ? [el('span', { className: 'rv-num pro' + (r.profit === null ? ' na' : r.profit < 0 ? ' neg' : ''), textContent: r.profit === null ? 'no cost' : inr(r.profit) })] : [])),
+      el('div', { className: 'rv-bar' }, el('i', { style: `width:${Math.max(2, (r.revenue / top) * 100)}%` })),
+      el('small', { className: 'muted', textContent: `${r.units} unit${r.units === 1 ? '' : 's'}` }))));
+  };
+  $('#revProducts').replaceChildren(rows(d.top_products));
+  $('#revCategories').replaceChildren(rows(d.categories));
+  $('#revBrands').replaceChildren(rows(d.brands));
+
+  const split = c.cod + c.prepaid;
+  $('#revPayments').replaceChildren(
+    el('div', { className: 'rv-split' }, el('i', { className: 'cod', style: `width:${split ? (c.cod / split) * 100 : 0}%` }), el('i', { className: 'pre', style: `width:${split ? (c.prepaid / split) * 100 : 0}%` })),
+    kv([['Cash on delivery', inr(c.cod)], ['Prepaid', inr(c.prepaid)], ['Not yet paid (to collect)', inr(c.unpaid)]]));
+
+  const order = ['pending', 'accepted', 'shipped', 'delivered', 'rejected', 'cancelled'];
+  $('#revStatuses').replaceChildren(d.statuses.length
+    ? el('ul', { className: 'rv-chips' }, ...order.filter(s => d.statuses.some(x => x.status === s)).map(s => {
+      const x = d.statuses.find(y => y.status === s);
+      return el('li', {}, el('span', { className: 'badge s-' + s, textContent: s }), el('b', { textContent: x.orders }), el('small', { textContent: inr(x.amount) }));
+    }))
+    : el('p', { className: 'muted', textContent: 'No orders in this period.' }));
+
+  const r = d.returns;
+  $('#revReturns').replaceChildren(kv([['Return requests', String(r.requests)], ['Return rate (of delivered orders)', pct(r.rate)], ['Waiting to be handled', String(r.pending)], ['Amount refunded', inr(r.refunded_amount)]]));
+  const cu = d.customers;
+  $('#revCustomers').replaceChildren(kv([['Customers who bought', String(cu.buyers)], ['Repeat customers', cu.buyers ? `${cu.repeat} (${pct(Math.round((cu.repeat / cu.buyers) * 1000) / 10)})` : '—'], ['New sign-ups', String(cu.new)]]));
+  const inv = d.inventory;
+  $('#revStock').replaceChildren(kv([['Units in stock', String(inv.units)], ['Value at selling price', inr(inv.retail_value)],
+    ['Value at cost', inv.missing_cost ? `${inr(inv.cost_value)} (partial)` : inr(inv.cost_value)],
+    ['Potential profit', inv.missing_cost ? '—' : inr(inv.retail_value - inv.cost_value)]]));
+}
+
+function kv(pairs) {
+  return el('dl', { className: 'rv-kv' }, ...pairs.flatMap(([k, v]) => [el('dt', { textContent: k }), el('dd', { textContent: v })]));
+}
+
+// Revenue as bars, profit as a line (hand-drawn SVG, no chart library)
+function buildChart(series, granularity, hasCost) {
+  const W = 800, H = 280, L = 58, R = 14, T = 14, B = 34;
+  const label = b => (granularity === 'month' ? new Date(b + '-01T00:00:00Z').toLocaleString('en-IN', { month: 'short', year: '2-digit', timeZone: 'UTC' }) : new Date(b + 'T00:00:00Z').toLocaleString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' }));
+  const maxV = Math.max(1, ...series.map(p => p.revenue), ...(hasCost ? series.map(p => p.profit) : [0]));
+  const minV = Math.min(0, ...(hasCost ? series.map(p => p.profit) : [0]));
+  // Round axis steps (1, 2, 2.5, 5 × 10ⁿ) so the labels are clean and never repeat
+  const rough = (maxV - Math.min(0, minV)) / 4, mag = Math.pow(10, Math.floor(Math.log10(rough)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= rough);
+  const top = Math.ceil(maxV / step) * step, bottom = Math.floor(minV / step) * step;
+  const ticks = Array.from({ length: Math.round((top - bottom) / step) + 1 }, (_, k) => bottom + k * step);
+  const fmtAxis = v => (Math.abs(v) >= 1e5 ? '₹' + +(v / 1e5).toFixed(2) + 'L' : Math.abs(v) >= 1e3 ? '₹' + +(v / 1e3).toFixed(2) + 'k' : '₹' + Math.round(v));
+  const lo = bottom, span = top - lo;
+  const x0 = i => L + (i + 0.5) * ((W - L - R) / series.length);
+  const y = v => T + (1 - (v - lo) / span) * (H - T - B);
+  const bw = Math.max(2, Math.min(34, ((W - L - R) / series.length) * 0.62));
+  const s = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Revenue and profit over time', class: 'rv-svg' });
+  for (const v of ticks) {
+    s.append(svg('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: 'grid' }),
+      svg('text', { x: L - 8, y: y(v) + 4, 'text-anchor': 'end', class: 'ax' }, fmtAxis(v)));
+  }
+  const every = Math.ceil(series.length / 8);
+  series.forEach((p, i) => {
+    const bar = svg('rect', { x: x0(i) - bw / 2, y: y(Math.max(p.revenue, 0)), width: bw, height: Math.max(0, y(0) - y(Math.max(p.revenue, 0))), rx: 3, class: 'bar' });
+    bar.append(svg('title', {}, `${label(p.bucket)}\nRevenue ${inr(p.revenue)}${hasCost ? '\nProfit ' + inr(p.profit) : ''}\nOrders ${p.orders}`));
+    s.append(bar);
+    if (i % every === 0) s.append(svg('text', { x: x0(i), y: H - 12, 'text-anchor': 'middle', class: 'ax' }, label(p.bucket)));
+  });
+  if (hasCost) {
+    s.append(svg('polyline', { points: series.map((p, i) => `${x0(i)},${y(p.profit)}`).join(' '), class: 'pline', fill: 'none' }));
+    if (series.length <= 45) series.forEach((p, i) => { if (p.revenue) s.append(svg('circle', { cx: x0(i), cy: y(p.profit), r: 3.5, class: 'pdot' })); });
+  }
+  return s;
 }
